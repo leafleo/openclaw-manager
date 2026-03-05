@@ -3026,15 +3026,27 @@ pub async fn delete_agent(agent_id: String) -> Result<String, String> {
 
     if let Some(agent_dir) = agent_dir_to_delete {
         let path = std::path::Path::new(&agent_dir);
-        // Check if this is a nested 'agent' directory (standard structure: .../agents/<id>/agent)
-        // If so, we want to delete the PARENT directory (e.g. .../agents/<id>) to clean up everything including sessions.
-        let path_to_remove = if path.ends_with("agent") {
-            path.parent().unwrap_or(path)
-        } else {
-            path
-        };
+        let mut path_to_remove = path;
+        
+        // Safety check: if the standard structure is ~/.openclaw/agents/<id>/agent
+        // we want to delete the <id> folder to also clear sessions and other subdirectories.
+        // We only do this if we are certain the grandparent is "agents".
+        if path.ends_with("agent") {
+            if let Some(parent) = path.parent() {
+                if let Some(grandparent) = parent.parent() {
+                    let grandparent_name = grandparent.file_name().unwrap_or_default().to_string_lossy();
+                    if grandparent_name == "agents" {
+                        path_to_remove = parent;
+                    }
+                }
+            }
+        }
 
-        if path_to_remove.exists() {
+        // Final safety guard: NEVER delete the openclaw_home itself or anything suspiciously short
+        let openclaw_home = platform::get_config_dir();
+        if path_to_remove.to_string_lossy() == openclaw_home || path_to_remove.components().count() <= 2 {
+            warn!("[Agents] SAFETY ABORT: Refusing to delete root or dangerously short path: {:?}", path_to_remove);
+        } else if path_to_remove.exists() {
             info!("[Agents] Removing agent directory tree: {:?}", path_to_remove);
             if let Err(e) = std::fs::remove_dir_all(path_to_remove) {
                 warn!("[Agents] Failed to remove agent directory {:?}: {}", path_to_remove, e);
@@ -3056,7 +3068,11 @@ pub async fn delete_agent(agent_id: String) -> Result<String, String> {
 
     if let Some(workspace) = workspace_to_delete {
         let path = std::path::Path::new(&workspace);
-        if path.exists() {
+        let openclaw_home = platform::get_config_dir();
+        
+        if path.to_string_lossy() == openclaw_home || path.components().count() <= 2 {
+            warn!("[Agents] SAFETY ABORT: Refusing to delete root or dangerously short workspace path: {:?}", path);
+        } else if path.exists() {
             info!("[Agents] Removing workspace directory: {}", workspace);
             if let Err(e) = std::fs::remove_dir_all(path) {
                 warn!("[Agents] Failed to remove workspace directory {}: {}", workspace, e);
