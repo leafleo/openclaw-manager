@@ -55,24 +55,27 @@ pub async fn check_environment() -> Result<EnvironmentStatus, String> {
     let os = platform::get_os();
     info!("[Environment Check] Operating system: {}", os);
 
-    // Check Node.js
-    info!("[Environment Check] Checking Node.js...");
-    let node_version = get_node_version();
+    // Run expensive checks concurrently
+    info!("[Environment Check] Checking Node.js, Git, and OpenClaw concurrently...");
+    let (node_res, git_res, openclaw_res) = tokio::join!(
+        tokio::task::spawn_blocking(|| get_node_version()),
+        tokio::task::spawn_blocking(|| get_git_version()),
+        tokio::task::spawn_blocking(|| get_openclaw_version())
+    );
+
+    let node_version = node_res.unwrap_or(None);
+    let git_version = git_res.unwrap_or(None);
+    let openclaw_version = openclaw_res.unwrap_or(None);
+
     let node_installed = node_version.is_some();
     let node_version_ok = check_node_version_requirement(&node_version);
     info!("[Environment Check] Node.js: installed={}, version={:?}, version_ok={}",
         node_installed, node_version, node_version_ok);
 
-    // Check Git
-    info!("[Environment Check] Checking Git...");
-    let git_version = get_git_version();
     let git_installed = git_version.is_some();
     info!("[Environment Check] Git: installed={}, version={:?}",
         git_installed, git_version);
 
-    // Check OpenClaw
-    info!("[Environment Check] Checking OpenClaw...");
-    let openclaw_version = get_openclaw_version();
     let openclaw_installed = openclaw_version.is_some();
     info!("[Environment Check] OpenClaw: installed={}, version={:?}",
         openclaw_installed, openclaw_version);
@@ -80,7 +83,7 @@ pub async fn check_environment() -> Result<EnvironmentStatus, String> {
     // Check Gateway Service (only if OpenClaw is installed)
     let gateway_service_installed = if openclaw_installed {
         info!("[Environment Check] Checking Gateway Service...");
-        let installed = check_gateway_installed();
+        let installed = tokio::task::spawn_blocking(|| check_gateway_installed()).await.unwrap_or(false);
         info!("[Environment Check] Gateway Service: installed={}", installed);
         installed
     } else {

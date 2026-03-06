@@ -40,10 +40,10 @@ jobs:
             | **Linux** | `.deb` or `.AppImage` |
 
             ### What's New
-            - **Self-Update Feature**: Check for and install Manager updates directly from Settings — no more manual downloads!
-            - **Signed Releases**: All release artifacts are now cryptographically signed for secure updates.
-            - **Manager Update UI**: New "Manager Update" card in Settings with version check, download progress bar, and one-click restart.
-            - **Updater Plugin**: Integrated Tauri v2 updater plugin with GitHub Releases endpoint.
+            - **Startup Speed Optimization:** Frontend elements now load concurrently. Replaced rigid blocking queries with lazy background loading, heavily reducing time-to-render.
+            - **React Lazy Chunking:** Split the frontend JS bundles. Heavy components (Settings, API tools) load entirely on demand, severely lightening the payload.
+            - **Concurrent Shell Environment Check:** Rust environment assertions (`node`, `git`, OpenClaw CLI) now evaluate in parallel async via `tokio`, cutting startup delay significantly.
+            - **Next-Gen 2026 AI Models:** Formally bumped and integrated the newest developer API endpoints matching the absolute latest models out right now: Anthropic (Claude Opus/Sonnet 4.6), OpenAI (GPT-5.4, o3-mini), Google (Gemini 3.1 Pro/Flash-Lite), DeepSeek, Qwen (3.5 Plus/Max), MiniMax (M2.5), and Venice AI (Llama 3.3 Default).
 
             See the [full changelog](https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}) for details.
           draft: true

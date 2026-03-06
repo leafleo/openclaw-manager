@@ -1,0 +1,5 @@
+### 💥 What's Fixed
+- **Destructive Agent Deletion Bug Fixed**: Resolved a critical issue where deleting an agent that pointed to the legacy `~/.openclaw/agent` directory structure would mistakenly resolve and aggressively delete the entire `~/.openclaw` parent folder containing all sessions and configs. 
+- **Workspace Deletion Safeguards**: Added strict root directory bounds (`platform::get_config_dir()`) and path depth checks to permanently prevent the Manager from deleting system-level or home drives if a workspace or agent directory was misconfigured.
+
+**Full Changelog**: https://github.com/MrFadiAi/openclaw-manager/commits/v0.0.17

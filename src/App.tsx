@@ -3,19 +3,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { Sidebar } from './components/Layout/Sidebar';
 import { Header } from './components/Layout/Header';
-import { Dashboard } from './components/Dashboard';
-import { AIConfig } from './components/AIConfig';
-import { Channels } from './components/Channels';
-import { MCP } from './components/MCP';
-import { Skills } from './components/Skills';
-import { Settings } from './components/Settings';
 
-import { Logs } from './components/Logs';
 import { appLogger } from './lib/logger';
 import { isTauri } from './lib/tauri';
 import { Download, X, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
-import { Agents } from './components/Agents';
+// Lazy loaded page components
+const Dashboard = React.lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
+const AIConfig = React.lazy(() => import('./components/AIConfig').then(module => ({ default: module.AIConfig })));
+const Channels = React.lazy(() => import('./components/Channels').then(module => ({ default: module.Channels })));
+const MCP = React.lazy(() => import('./components/MCP').then(module => ({ default: module.MCP })));
+const Skills = React.lazy(() => import('./components/Skills').then(module => ({ default: module.Skills })));
+const Settings = React.lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })));
+const Logs = React.lazy(() => import('./components/Logs').then(module => ({ default: module.Logs })));
+const Agents = React.lazy(() => import('./components/Agents').then(module => ({ default: module.Agents })));
 
 export type PageType = 'dashboard' | 'mcp' | 'skills' | 'ai' | 'channels' | 'agents' | 'logs' | 'settings';
 
@@ -94,7 +95,6 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 
 function App() {
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
-  const [isReady, setIsReady] = useState<boolean | null>(null);
   const [envStatus, setEnvStatus] = useState<EnvironmentStatus | null>(null);
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus | null>(null);
 
@@ -121,7 +121,6 @@ function App() {
   const checkEnvironment = useCallback(async () => {
     if (!isTauri()) {
       appLogger.warn('Not in Tauri environment, skipping environment check');
-      setIsReady(true);
       return;
     }
 
@@ -130,10 +129,8 @@ function App() {
       const status = await invoke<EnvironmentStatus>('check_environment');
       appLogger.info('Environment check completed', status);
       setEnvStatus(status);
-      setIsReady(true); // Always show main interface
     } catch (e) {
       appLogger.error('Environment check failed', e);
-      setIsReady(true);
     }
   }, []);
 
@@ -343,20 +340,16 @@ function App() {
     );
   };
 
-  // Checking environment
-  if (isReady === null) {
-    return (
-      <div className="flex h-screen bg-dark-900 items-center justify-center">
-        <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
-        <div className="relative z-10 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 mb-4 animate-pulse">
-            <span className="text-3xl">🦞</span>
-          </div>
-          <p className="text-dark-400">Starting...</p>
+  const LoadingSpinner = () => (
+    <div className="flex h-full items-center justify-center">
+      <div className="relative z-10 text-center">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 mb-4 animate-pulse shadow-lg shadow-purple-900/20">
+          <span className="text-3xl">🦞</span>
         </div>
+        <p className="text-dark-400 font-medium">Loading component...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   // Main interface
   return (
@@ -557,9 +550,11 @@ function App() {
         <Header currentPage={currentPage} />
 
         {/* Page content */}
-        <main className="flex-1 overflow-hidden p-6">
+        <main className="flex-1 overflow-hidden p-6 relative">
           <ErrorBoundary>
-            {renderPage()}
+            <React.Suspense fallback={<LoadingSpinner />}>
+              {renderPage()}
+            </React.Suspense>
           </ErrorBoundary>
         </main>
       </div>

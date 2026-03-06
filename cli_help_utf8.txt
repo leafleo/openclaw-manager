@@ -1,0 +1,23 @@
+﻿
+≡ƒª₧ OpenClaw 2026.3.2 (85377a2) ΓÇö I've survived more breaking changes than your last three relationships.
+
+Usage: openclaw config [options] [command]
+
+Non-interactive config helpers (get/set/unset/file/validate). Run without
+subcommand for the setup wizard.
+
+Options:
+  -h, --help           Display help for command
+  --section <section>  Configure wizard sections (repeatable). Use with no
+                       subcommand. (default: [])
+
+Commands:
+  file                 Print the active config file path
+  get                  Get a config value by dot path
+  set                  Set a config value by dot path
+  unset                Remove a config value by dot path
+  validate             Validate the current config against the schema without
+                       starting the gateway
+
+Docs: https://docs.openclaw.ai/cli/config
+

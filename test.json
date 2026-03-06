@@ -1,0 +1,17 @@
+{
+    "tools": {
+        "profile": "messaging",
+        "pdf": {
+            "provider": "anthropic",
+            "maxPages": 10
+        }
+    },
+    "memorySearch": {
+        "provider": "ollama"
+    },
+    "sessions_spawn": {
+        "inlineFileAttachments": {
+            "enabled": true
+        }
+    }
+}
