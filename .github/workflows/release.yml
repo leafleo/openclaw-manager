@@ -118,7 +118,6 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           updaterJsonPreferNsis: true
           args: --target ${{ matrix.target }}
-        environment: dev
   publish-release:
     needs: [create-release, build]
     runs-on: ubuntu-latest
