@@ -52,6 +52,7 @@ jobs:
 
   build:
     needs: create-release
+    environment: dev  # 指定使用 dev 环境的 
     strategy:
       fail-fast: false
       matrix:
@@ -117,7 +118,7 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           updaterJsonPreferNsis: true
           args: --target ${{ matrix.target }}
-
+        environment: dev
   publish-release:
     needs: [create-release, build]
     runs-on: ubuntu-latest
