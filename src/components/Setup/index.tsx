@@ -46,39 +46,39 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
   const [step, setStep] = useState<'check' | 'install' | 'complete'>('check');
 
   const checkEnvironment = async () => {
-    setupLogger.info('Checking system environment...');
+    setupLogger.info('正在检查系统环境...');
     setChecking(true);
     setError(null);
     try {
       const status = await invoke<EnvironmentStatus>('check_environment');
-      setupLogger.state('Environment status', status);
+      setupLogger.state('环境状态', status);
       setEnvStatus(status);
 
       if (status.ready) {
-        setupLogger.info('✅ Environment ready');
+        setupLogger.info('✅ 环境准备就绪');
         setStep('complete');
         // Delay before transition to let user see success status
         setTimeout(() => onComplete(), 1500);
       } else {
-        setupLogger.warn('Environment not ready, dependencies need to be installed');
+        setupLogger.warn('环境未就绪，需要安装依赖项');
         setStep('install');
       }
     } catch (e) {
-      setupLogger.error('Environment check failed', e);
-      setError(`Environment check failed: ${e}`);
+      setupLogger.error('环境检查失败', e);
+      setError(`环境检查失败: ${e}`);
     } finally {
       setChecking(false);
     }
   };
 
   useEffect(() => {
-    setupLogger.info('Setup component initialized');
+    setupLogger.info('安装组件已初始化');
     checkEnvironment();
   }, []);
 
   const handleInstallNodejs = async () => {
-    setupLogger.action('Install Node.js');
-    setupLogger.info('Starting Node.js installation...');
+    setupLogger.action('安装 Node.js');
+    setupLogger.info('正在开始 Node.js 安装...');
     setInstalling('nodejs');
     setError(null);
 
@@ -87,24 +87,24 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
       const result = await invoke<InstallResult>('install_nodejs');
 
       if (result.success) {
-        setupLogger.info('✅ Node.js installed successfully');
+        setupLogger.info('✅ Node.js 安装成功');
         // Re-check environment
         await checkEnvironment();
       } else if (result.message.includes('restart') || result.message.includes('重启')) {
         // Need to restart application
-        setError('Node.js installation complete, please restart the application for environment variables to take effect');
+        setError('Node.js 安装完成，请重启应用以使环境变量生效');
       } else {
         // Open terminal for manual installation
         await invoke<string>('open_install_terminal', { installType: 'nodejs' });
-        setError('Installation terminal opened, please complete the installation in the terminal then click "Re-check"');
+        setError('安装终端已打开，请在终端中完成安装，然后点击"重新检查"');
       }
     } catch (e) {
       // If automatic installation fails, open terminal
       try {
         await invoke<string>('open_install_terminal', { installType: 'nodejs' });
-        setError('Installation terminal opened, please complete the installation in the terminal then click "Re-check"');
+        setError('安装终端已打开，请在终端中完成安装，然后点击"重新检查"');
       } catch (termErr) {
-        setError(`Installation failed: ${e}. ${termErr}`);
+        setError(`安装失败: ${e}. ${termErr}`);
       }
     } finally {
       setInstalling(null);
@@ -112,8 +112,8 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
   };
 
   const handleInstallOpenclaw = async () => {
-    setupLogger.action('Install OpenClaw');
-    setupLogger.info('Starting OpenClaw installation...');
+    setupLogger.action('安装 OpenClaw');
+    setupLogger.info('正在开始 OpenClaw 安装...');
     setInstalling('openclaw');
     setError(null);
 
@@ -121,25 +121,25 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
       const result = await invoke<InstallResult>('install_openclaw');
 
       if (result.success) {
-        setupLogger.info('✅ OpenClaw installed successfully, initializing config...');
+        setupLogger.info('✅ OpenClaw 安装成功，正在初始化配置...');
         // Initialize config
         await invoke<InstallResult>('init_openclaw_config');
-        setupLogger.info('✅ Config initialization complete');
+        setupLogger.info('✅ 配置初始化完成');
         // Re-check environment
         await checkEnvironment();
       } else {
-        setupLogger.warn('Automatic installation failed, opening terminal for manual installation');
+        setupLogger.warn('自动安装失败，打开终端进行手动安装');
         // Open terminal for manual installation
         await invoke<string>('open_install_terminal', { installType: 'openclaw' });
-        setError('Installation terminal opened, please complete the installation in the terminal then click "Re-check"');
+        setError('安装终端已打开，请在终端中完成安装，然后点击"重新检查"');
       }
     } catch (e) {
-      setupLogger.error('Installation failed, trying to open terminal', e);
+      setupLogger.error('安装失败，尝试打开终端', e);
       try {
         await invoke<string>('open_install_terminal', { installType: 'openclaw' });
-        setError('Installation terminal opened, please complete the installation in the terminal then click "Re-check"');
+        setError('安装终端已打开，请在终端中完成安装，然后点击"重新检查"');
       } catch (termErr) {
-        setError(`Installation failed: ${e}. ${termErr}`);
+        setError(`安装失败: ${e}. ${termErr}`);
       }
     } finally {
       setInstalling(null);
@@ -169,7 +169,7 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
             className="text-center py-6"
           >
             <Loader2 className="w-10 h-10 text-brand-500 animate-spin mx-auto mb-3" />
-            <p className="text-dark-300">Detecting system environment...</p>
+            <p className="text-dark-300">正在检测系统环境...</p>
           </motion.div>
         )}
 
@@ -185,7 +185,7 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
             {/* System info (non-embedded mode only) */}
             {!embedded && (
               <div className="flex items-center justify-between text-sm text-dark-400 pb-4 border-b border-dark-700">
-                <span>Operating System</span>
+                <span>操作系统</span>
                 <span className="text-dark-200">{getOsName(envStatus.os)}</span>
               </div>
             )}
@@ -203,8 +203,8 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
                   <p className="text-white font-medium">Node.js</p>
                   <p className="text-sm text-dark-400">
                     {envStatus.node_version
-                      ? `${envStatus.node_version} ${envStatus.node_version_ok ? '✓' : '(requires v22+)'}`
-                      : 'Not installed'}
+                      ? `${envStatus.node_version} ${envStatus.node_version_ok ? '✓' : '(需要 v22+)'}`
+                      : '未安装'}
                   </p>
                 </div>
               </div>
@@ -220,12 +220,12 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
                   {installing === 'nodejs' ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Installing...
+                      安装中...
                     </>
                   ) : (
                     <>
                       <Download className="w-4 h-4" />
-                      Install
+                      安装
                     </>
                   )}
                 </button>
@@ -244,7 +244,7 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
                 <div>
                   <p className="text-white font-medium">OpenClaw</p>
                   <p className="text-sm text-dark-400">
-                    {envStatus.openclaw_version || 'Not installed'}
+                    {envStatus.openclaw_version || '未安装'}
                   </p>
                 </div>
               </div>
@@ -257,17 +257,17 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
                   disabled={installing !== null || !envStatus.node_version_ok}
                   className={`btn-primary text-sm px-4 py-2 flex items-center gap-2 ${!envStatus.node_version_ok ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
-                  title={!envStatus.node_version_ok ? 'Please install Node.js first' : ''}
+                  title={!envStatus.node_version_ok ? '请先安装 Node.js' : ''}
                 >
                   {installing === 'openclaw' ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Installing...
+                      安装中...
                     </>
                   ) : (
                     <>
                       <Download className="w-4 h-4" />
-                      Install
+                      安装
                     </>
                   )}
                 </button>
@@ -293,7 +293,7 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
                 className="flex-1 btn-secondary py-2.5 flex items-center justify-center gap-2"
               >
                 <RefreshCw className={`w-4 h-4 ${checking ? 'animate-spin' : ''}`} />
-                Re-check
+                重新检查
               </button>
 
               {envStatus.ready && (
@@ -301,7 +301,7 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
                   onClick={onComplete}
                   className="flex-1 btn-primary py-2.5 flex items-center justify-center gap-2"
                 >
-                  Get Started
+                  开始使用
                   <ArrowRight className="w-4 h-4" />
                 </button>
               )}
@@ -315,7 +315,7 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
                 rel="noopener noreferrer"
                 className="text-sm text-dark-400 hover:text-brand-400 transition-colors inline-flex items-center gap-1"
               >
-                Manually download Node.js
+                手动下载 Node.js
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
@@ -337,9 +337,9 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
             >
               <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-3" />
             </motion.div>
-            <h3 className="text-lg font-bold text-white mb-1">Environment Ready!</h3>
+            <h3 className="text-lg font-bold text-white mb-1">环境准备就绪！</h3>
             <p className="text-dark-400 text-sm">
-              Node.js and OpenClaw are properly installed
+              Node.js 和 OpenClaw 已正确安装
             </p>
           </motion.div>
         )}
@@ -356,8 +356,8 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
             <span className="text-2xl">⚠️</span>
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white mb-1">Environment Setup</h2>
-            <p className="text-dark-400 text-sm">Missing dependencies detected, please complete the following installations</p>
+            <h2 className="text-lg font-bold text-white mb-1">环境设置</h2>
+            <p className="text-dark-400 text-sm">检测到缺少依赖项，请完成以下安装</p>
           </div>
         </div>
 
@@ -392,7 +392,7 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
             <span className="text-4xl">🦞</span>
           </motion.div>
           <h1 className="text-2xl font-bold text-white mb-2">OpenClaw Manager</h1>
-          <p className="text-dark-400">Environment Detection & Setup Wizard</p>
+          <p className="text-dark-400">环境检测与安装向导</p>
         </div>
 
         {/* Main card */}

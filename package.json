@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "RUST_LOG=info tauri build",
+    "tauri:dev:log": "RUST_LOG=debug tauri dev"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

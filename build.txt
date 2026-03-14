@@ -1,0 +1,53 @@
+步骤 1：安装交叉编译工具链
+# 使用 Homebrew 安装 mingw-w64
+brew install mingw-w64
+
+# 验证安装
+x86_64-w64-mingw32-gcc --version
+
+步骤 2：配置 Rust 目标
+# 添加 Windows 64位目标
+rustup target add x86_64-pc-windows-gnu
+
+# 验证目标已安装
+rustup target list | grep windows
+
+### 步骤 3：配置交叉编译环境
+在 ~/.cargo/config.toml 中添加：
+
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
+ar = "x86_64-w64-mingw32-ar"
+
+
+### 步骤 4：针对不同 Windows 版本的构建 构建 Windows 7/8 版本
+# 设置 Windows 7 兼容模式
+```
+# 为 Windows 7 构建
+export PKG_CONFIG_ALLOW_CROSS=1
+export RUSTFLAGS="-C target-feature=+crt-static"
+npm run tauri build -- --target x86_64-pc-windows-gnu --output-name "OpenClaw-Manager-Win7.exe"
+```
+
+
+构建 Windows 10/11 版本
+# Windows 10/11 是默认目标
+export PKG_CONFIG_ALLOW_CROSS=1
+
+npm run tauri build -- --target x86_64-pc-windows-gnu
+
+### 步骤 5：配置 Windows 版本特定设置
+在 tauri.conf.json 中添加 Windows 版本配置：
+"bundle": {
+  "windows": {
+    "certificateThumbprint": null,
+    "digestAlgorithm": "sha256",
+    "timestampUrl": "",
+    "version": {
+      "major": 10,
+      "minor": 0,
+      "build": 17763,
+      "revision": 0
+    }
+  }
+}

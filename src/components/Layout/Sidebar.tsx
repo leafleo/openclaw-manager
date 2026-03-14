@@ -26,15 +26,15 @@ interface SidebarProps {
 }
 
 const menuItems: { id: PageType; label: string; icon: React.ElementType }[] = [
-  { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
-  { id: 'mcp', label: 'MCPs', icon: Blocks },
-  { id: 'skills', label: 'Skills', icon: Book },
-  { id: 'agents', label: 'Agents', icon: Users },
-  { id: 'ai', label: 'AI Config', icon: Bot },
-  { id: 'channels', label: 'Channels', icon: MessageSquare },
+  { id: 'dashboard', label: '概览', icon: LayoutDashboard },
+  { id: 'mcp', label: 'MCP', icon: Blocks },
+  { id: 'skills', label: '技能', icon: Book },
+  { id: 'agents', label: '代理', icon: Users },
+  { id: 'ai', label: 'AI 配置', icon: Bot },
+  { id: 'channels', label: '渠道', icon: MessageSquare },
 
-  { id: 'logs', label: 'Logs', icon: ScrollText },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'logs', label: '日志', icon: ScrollText },
+  { id: 'settings', label: '设置', icon: Settings },
 ];
 
 export function Sidebar({ currentPage, onNavigate, serviceStatus }: SidebarProps) {
@@ -49,7 +49,7 @@ export function Sidebar({ currentPage, onNavigate, serviceStatus }: SidebarProps
           </div>
           <div>
             <h1 className="text-sm font-semibold text-white">OpenClaw</h1>
-            <p className="text-xs text-gray-500">Manager</p>
+            <p className="text-xs text-gray-500">管理器</p>
           </div>
         </div>
       </div>
@@ -94,10 +94,10 @@ export function Sidebar({ currentPage, onNavigate, serviceStatus }: SidebarProps
           <div className="flex items-center gap-2 mb-2">
             <div className={clsx('status-dot', isRunning ? 'running' : 'stopped')} />
             <span className="text-xs text-gray-400">
-              {isRunning ? 'Service Running' : 'Service Stopped'}
+              {isRunning ? '服务运行中' : '服务已停止'}
             </span>
           </div>
-          <p className="text-xs text-gray-500">Port: {serviceStatus?.port ?? 18789}</p>
+          <p className="text-xs text-gray-500">端口: {serviceStatus?.port ?? 18789}</p>
         </div>
       </div>
     </aside>

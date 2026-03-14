@@ -754,6 +754,8 @@ if (-not $nodeVersion) {
 }
 
 Write-Host "Installing OpenClaw using npm..."
+# Set Alibaba Cloud npm registry
+npm config set registry https://registry.npmmirror.com/
 npm install -g openclaw@latest --unsafe-perm
 
 # Verify installation
@@ -801,6 +803,8 @@ if ! command -v node &> /dev/null; then
 fi
 
 echo "Installing OpenClaw using npm..."
+# Set Alibaba Cloud npm registry
+npm config set registry https://registry.npmmirror.com/
 npm install -g openclaw@latest --unsafe-perm
 
 # Verify installation
@@ -1005,6 +1009,8 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 Write-Host "Installing OpenClaw..." -ForegroundColor Yellow
+# Set Alibaba Cloud npm registry
+npm config set registry https://registry.npmmirror.com/
 npm install -g openclaw@latest
 
 Write-Host ""
@@ -1029,6 +1035,8 @@ echo "========================================"
 echo ""
 
 echo "Installing OpenClaw..."
+# Set Alibaba Cloud npm registry
+npm config set registry https://registry.npmmirror.com/
 npm install -g openclaw@latest
 
 echo ""
@@ -1071,6 +1079,8 @@ echo "========================================"
 echo ""
 
 echo "Installing OpenClaw..."
+# Set Alibaba Cloud npm registry
+npm config set registry https://registry.npmmirror.com/
 npm install -g openclaw@latest
 
 echo ""
