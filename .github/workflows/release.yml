@@ -116,7 +116,7 @@ jobs:
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           updaterJsonPreferNsis: true
-          projectPath: ./${{ matrix.target }}
+          args: --target ${{ matrix.target }}
 
   publish-release:
     needs: [create-release, build]
