@@ -67,7 +67,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ1RjhCMDAzMEM2OTU3NTUKUldSVlYya01BN0Q0MVZtTXFRVW1BODJTalJTWEsxVnlENkhJV1F0RXVyVVBRcFhtejdHdnVJelIK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgyOEUzNDkyNDM3NDc4NTEKUldSUmVIUkRralNPZ3VnSUZCaWtjNUdwNVpOeUdPYzRaQnR0YjduOG5kaVZuV2p5ZXBiWWt5ZFEK",
       "endpoints": [
         "https://github.com/MrFadiAi/openclaw-manager/releases/latest/download/latest.json"
       ]
