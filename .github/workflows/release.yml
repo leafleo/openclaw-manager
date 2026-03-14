@@ -108,7 +108,7 @@ jobs:
         run: npm ci
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -116,8 +116,7 @@ jobs:
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           updaterJsonPreferNsis: true
-          projectPath: ./
-          args: --target ${{ matrix.target }}
+          projectPath: ./${{ matrix.target }}
 
   publish-release:
     needs: [create-release, build]
