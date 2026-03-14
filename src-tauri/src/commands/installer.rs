@@ -754,6 +754,11 @@ if (-not $nodeVersion) {
 }
 
 Write-Host "Installing OpenClaw using npm..."
+
+# Configure Git to use HTTPS instead of SSH (fixes libsignal-node access issues)
+git config --global url."https://github.com/" insteadOf "git@github.com:" 2>$null
+git config --global url."https://github.com/" insteadOf "ssh://git@github.com/" 2>$null
+
 # Set Alibaba Cloud npm registry
 npm config set registry https://registry.npmmirror.com/
 npm install -g openclaw@latest --unsafe-perm
@@ -803,6 +808,11 @@ if ! command -v node &> /dev/null; then
 fi
 
 echo "Installing OpenClaw using npm..."
+
+# Configure Git to use HTTPS instead of SSH (fixes libsignal-node access issues)
+git config --global url."https://github.com/" insteadOf "git@github.com:" 2>/dev/null || true
+git config --global url."https://github.com/" insteadOf "ssh://git@github.com/" 2>/dev/null || true
+
 # Set Alibaba Cloud npm registry
 npm config set registry https://registry.npmmirror.com/
 npm install -g openclaw@latest --unsafe-perm
@@ -1009,6 +1019,11 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 Write-Host "Installing OpenClaw..." -ForegroundColor Yellow
+
+# Configure Git to use HTTPS instead of SSH (fixes libsignal-node access issues)
+git config --global url."https://github.com/" insteadOf "git@github.com:" 2>$null
+git config --global url."https://github.com/" insteadOf "ssh://git@github.com/" 2>$null
+
 # Set Alibaba Cloud npm registry
 npm config set registry https://registry.npmmirror.com/
 npm install -g openclaw@latest
@@ -1035,6 +1050,11 @@ echo "========================================"
 echo ""
 
 echo "Installing OpenClaw..."
+
+# Configure Git to use HTTPS instead of SSH (fixes libsignal-node access issues)
+git config --global url."https://github.com/" insteadOf "git@github.com:" 2>/dev/null || true
+git config --global url."https://github.com/" insteadOf "ssh://git@github.com/" 2>/dev/null || true
+
 # Set Alibaba Cloud npm registry
 npm config set registry https://registry.npmmirror.com/
 npm install -g openclaw@latest
@@ -1079,6 +1099,11 @@ echo "========================================"
 echo ""
 
 echo "Installing OpenClaw..."
+
+# Configure Git to use HTTPS instead of SSH (fixes libsignal-node access issues)
+git config --global url."https://github.com/" insteadOf "git@github.com:" 2>/dev/null || true
+git config --global url."https://github.com/" insteadOf "ssh://git@github.com/" 2>/dev/null || true
+
 # Set Alibaba Cloud npm registry
 npm config set registry https://registry.npmmirror.com/
 npm install -g openclaw@latest
@@ -1390,6 +1415,10 @@ pub async fn update_openclaw() -> Result<InstallResult, String> {
 async fn update_openclaw_windows() -> Result<InstallResult, String> {
     info!("[Update OpenClaw] Executing npm install -g openclaw@latest...");
 
+    // Configure Git to use HTTPS instead of SSH (fixes libsignal-node access issues)
+    let _ = shell::run_cmd_output("git config --global url.\"https://github.com/\" insteadOf \"git@github.com:\"");
+    let _ = shell::run_cmd_output("git config --global url.\"https://github.com/\" insteadOf \"ssh://git@github.com/\"");
+
     match shell::run_cmd_output("npm install -g openclaw@latest") {
         Ok(output) => {
             info!("[Update OpenClaw] npm output: {}", output);
@@ -1418,6 +1447,11 @@ async fn update_openclaw_windows() -> Result<InstallResult, String> {
 async fn update_openclaw_unix() -> Result<InstallResult, String> {
     let script = r#"
 echo "Updating OpenClaw..."
+
+# Configure Git to use HTTPS instead of SSH (fixes libsignal-node access issues)
+git config --global url."https://github.com/" insteadOf "git@github.com:" 2>/dev/null || true
+git config --global url."https://github.com/" insteadOf "ssh://git@github.com/" 2>/dev/null || true
+
 npm install -g openclaw@latest
 
 # Verify update
