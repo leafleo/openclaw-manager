@@ -144,27 +144,26 @@ fn get_node_version() -> Option<String> {
 
         None
     } else {
-        // First try direct call
+        // First try direct call (with extended PATH already set in shell.rs)
         if let Ok(v) = shell::run_command_output("node", &["--version"]) {
-            return Some(v.trim().to_string());
+            let version = v.trim().to_string();
+            if version.starts_with('v') {
+                info!("[Environment Check] Found Node.js via PATH: {}", version);
+                return Some(version);
+            }
         }
 
-        // Detect common Node.js installation paths (macOS/Linux)
+        // Check common installation paths (only check if file exists, then execute)
         let possible_paths = get_unix_node_paths();
         for path in possible_paths {
             if std::path::Path::new(&path).exists() {
                 if let Ok(output) = shell::run_command_output(&path, &["--version"]) {
-                    info!("[Environment Check] Found Node.js at {}: {}", path, output.trim());
-                    return Some(output.trim().to_string());
+                    let version = output.trim().to_string();
+                    if version.starts_with('v') {
+                        info!("[Environment Check] Found Node.js at {}: {}", path, version);
+                        return Some(version);
+                    }
                 }
-            }
-        }
-
-        // Try to detect by loading user environment via shell
-        if let Ok(output) = shell::run_bash_output("source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null; node --version 2>/dev/null") {
-            if !output.is_empty() && output.starts_with('v') {
-                info!("[Environment Check] Found Node.js via user shell: {}", output.trim());
-                return Some(output.trim().to_string());
             }
         }
 
@@ -183,19 +182,10 @@ fn get_unix_node_paths() -> Vec<String> {
     // System installation
     paths.push("/usr/bin/node".to_string());
 
-    // nvm (check common versions)
     if let Some(home) = dirs::home_dir() {
         let home_str = home.display().to_string();
 
-        // nvm default versions
-        paths.push(format!("{}/.nvm/versions/node/v22.0.0/bin/node", home_str));
-        paths.push(format!("{}/.nvm/versions/node/v22.1.0/bin/node", home_str));
-        paths.push(format!("{}/.nvm/versions/node/v22.2.0/bin/node", home_str));
-        paths.push(format!("{}/.nvm/versions/node/v22.11.0/bin/node", home_str));
-        paths.push(format!("{}/.nvm/versions/node/v22.12.0/bin/node", home_str));
-        paths.push(format!("{}/.nvm/versions/node/v23.0.0/bin/node", home_str));
-
-        // Try nvm alias default (read nvm's default alias)
+        // nvm: check default alias first (most likely to be correct)
         let nvm_default = format!("{}/.nvm/alias/default", home_str);
         if let Ok(version) = std::fs::read_to_string(&nvm_default) {
             let version = version.trim();
@@ -204,7 +194,7 @@ fn get_unix_node_paths() -> Vec<String> {
             }
         }
 
-        // fnm
+        // fnm (check default alias)
         paths.push(format!("{}/.fnm/aliases/default/bin/node", home_str));
 
         // volta

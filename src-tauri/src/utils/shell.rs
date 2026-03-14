@@ -258,19 +258,9 @@ pub fn get_openclaw_path() -> Option<String> {
         }
     }
     
-    // Fallback: check if it's in PATH
+    // Fallback: check if it's in PATH (with extended PATH already set)
     if command_exists("openclaw") {
         return Some("openclaw".to_string());
-    }
-    
-    // Last resort: search via user shell
-    if !platform::is_windows() {
-        if let Ok(path) = run_bash_output("source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null; which openclaw 2>/dev/null") {
-            if !path.is_empty() && std::path::Path::new(&path).exists() {
-                info!("[Shell] Found openclaw via user shell: {}", path);
-                return Some(path);
-            }
-        }
     }
     
     None
