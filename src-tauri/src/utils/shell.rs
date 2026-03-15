@@ -276,6 +276,68 @@ pub fn get_openclaw_path() -> Option<String> {
     None
 }
 
+/// Get the openclaw package directory
+pub fn get_openclaw_package_dir() -> String {
+    // Try to find the package directory by checking the openclaw binary path
+    if let Some(openclaw_path) = get_openclaw_path() {
+        // If the path is a symlink, resolve it
+        if let Ok(canonical) = std::fs::canonicalize(&openclaw_path) {
+            // The package directory is typically in lib/node_modules/openclaw
+            let path_str = canonical.to_string_lossy().to_string();
+            
+            // Extract the package directory from the path
+            if let Some(pos) = path_str.find("/lib/node_modules/openclaw") {
+                return path_str[..pos + "/lib/node_modules/openclaw".len()].to_string();
+            }
+            
+            // Check if it's a local development version (in runtime-bundles)
+            if let Some(pos) = path_str.find("/runtime-bundles/common/openclaw/package") {
+                return path_str[..pos + "/runtime-bundles/common/openclaw/package".len()].to_string();
+            }
+        }
+    }
+    
+    // Fallback: try to find the package directory in common locations
+    if let Some(home) = dirs::home_dir() {
+        let home_str = home.display().to_string();
+        
+        // Check nvm installation
+        if let Ok(nvm_default) = std::fs::read_to_string(format!("{}/.nvm/alias/default", home_str)) {
+            let version = nvm_default.trim();
+            let version_str = if version.starts_with('v') {
+                version.to_string()
+            } else {
+                format!("v{}", version)
+            };
+            let nvm_path = format!("{}/.nvm/versions/node/{}/lib/node_modules/openclaw", home_str, version_str);
+            if std::path::Path::new(&nvm_path).exists() {
+                return nvm_path;
+            }
+        }
+        
+        // Check npm global installation
+        let npm_global = format!("{}/.npm-global/lib/node_modules/openclaw", home_str);
+        if std::path::Path::new(&npm_global).exists() {
+            return npm_global;
+        }
+    }
+    
+    // Check if we're in the openclaw-manager project
+    if let Ok(current_dir) = std::env::current_dir() {
+        let current_dir_str = current_dir.to_string_lossy().to_string();
+        if let Some(pos) = current_dir_str.find("/openclaw-manager") {
+            let project_dir = &current_dir_str[..pos + "/openclaw-manager".len()];
+            let openclaw_dir = format!("{}/src-tauri/runtime-bundles/common/openclaw/package", project_dir);
+            if std::path::Path::new(&openclaw_dir).exists() {
+                return openclaw_dir;
+            }
+        }
+    }
+    
+    // Last resort: return current directory
+    ".".to_string()
+}
+
 /// Get possible openclaw installation paths on Unix systems
 fn get_unix_openclaw_paths() -> Vec<String> {
     let mut paths = Vec::new();
@@ -302,7 +364,13 @@ fn get_unix_openclaw_paths() -> Vec<String> {
         if let Ok(version) = std::fs::read_to_string(&nvm_default) {
             let version = version.trim();
             if !version.is_empty() {
-                paths.insert(0, format!("{}/.nvm/versions/node/v{}/bin/openclaw", home_str, version));
+                // Check if version already starts with 'v'
+                let version_str = if version.starts_with('v') {
+                    version.to_string()
+                } else {
+                    format!("v{}", version)
+                };
+                paths.insert(0, format!("{}/.nvm/versions/node/{}/bin/openclaw", home_str, version_str));
             }
         }
         
@@ -360,6 +428,10 @@ pub fn run_openclaw(args: &[&str]) -> Result<String, String> {
     
     debug!("[Shell] openclaw path: {}", openclaw_path);
     
+    // Get openclaw package directory
+    let package_dir = get_openclaw_package_dir();
+    debug!("[Shell] openclaw package directory: {}", package_dir);
+    
     // Get extended PATH to ensure node can be found
     let extended_path = get_extended_path();
     debug!("[Shell] Extended PATH: {}", extended_path);
@@ -370,7 +442,8 @@ pub fn run_openclaw(args: &[&str]) -> Result<String, String> {
         let gw_token = get_gateway_token_from_config();
         cmd.args(args)
             .env("OPENCLAW_GATEWAY_TOKEN", &gw_token)
-            .env("PATH", &extended_path);
+            .env("PATH", &extended_path)
+            .current_dir(get_openclaw_package_dir());
         
         #[cfg(windows)]
         cmd.creation_flags(CREATE_NO_WINDOW);
@@ -381,7 +454,8 @@ pub fn run_openclaw(args: &[&str]) -> Result<String, String> {
         let gw_token = get_gateway_token_from_config();
         cmd.args(args)
             .env("OPENCLAW_GATEWAY_TOKEN", &gw_token)
-            .env("PATH", &extended_path);
+            .env("PATH", &extended_path)
+            .current_dir(get_openclaw_package_dir());
         
         #[cfg(windows)]
         cmd.creation_flags(CREATE_NO_WINDOW);

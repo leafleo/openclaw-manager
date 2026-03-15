@@ -31,9 +31,18 @@ export function Header({ currentPage }: HeaderProps) {
       const url = await invoke<string>('get_dashboard_url');
       await open(url);
     } catch (e) {
-      console.error('Failed to open Dashboard:', e);
-      // Fallback: use window.open (without token)
-      window.open('http://localhost:18789', '_blank');
+      console.error('Failed to get dashboard URL:', e);
+      
+      // Fallback: try to get token separately and build URL manually
+      try {
+        const token = await invoke<string>('get_or_create_gateway_token');
+        const url = `http://localhost:18789?token=${token}`;
+        await open(url);
+      } catch (tokenError) {
+        console.error('Failed to get gateway token:', tokenError);
+        // Last resort: open without token (user will need to authenticate manually)
+        await open('http://localhost:18789');
+      }
     } finally {
       setOpening(false);
     }

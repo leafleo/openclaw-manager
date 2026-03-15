@@ -10,9 +10,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "RUST_LOG=info tauri build",
-    "tauri:dev:log": "RUST_LOG=debug tauri dev"
+    "tauri:dev": "PATH=~/.cargo/bin:$PATH tauri dev",
+    "tauri:build": "PATH=~/.cargo/bin:$PATH RUST_LOG=info tauri build",
+    "tauri:dev:log": "PATH=~/.cargo/bin:$PATH RUST_LOG=debug tauri dev"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

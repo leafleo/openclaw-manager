@@ -113,20 +113,28 @@ fn find_all_port_pids(port: u16) -> Vec<u32> {
 }
 
 /// Get service status
-/// Uses openclaw gateway health to verify the gateway is actually responding,
-/// not just that the port is busy (which could be svchost.exe or another process).
+/// Uses port check to verify the gateway is actually running.
+/// Note: We don't use `openclaw gateway health` here because it requires
+/// access to ~/.openclaw/identity/device-auth.json which may fail due to
+/// sandbox restrictions in some environments.
 #[command]
 pub async fn get_service_status() -> Result<ServiceStatus, String> {
-    // Primary check: use gateway health RPC to verify the gateway is actually running
-    let health_ok = match shell::run_openclaw(&["gateway", "health", "--timeout", "3000"]) {
-        Ok(_) => true,
-        Err(_) => false,
-    };
-
+    // Check if port is listening
     let pid = check_port_listening(SERVICE_PORT);
     
-    // Gateway is running only if health check passes AND port is occupied
-    let running = health_ok && pid.is_some();
+    // Additional verification: try to connect to the gateway via HTTP
+    // This is a lightweight check that doesn't require file system access
+    let http_ok = if pid.is_some() {
+        match check_gateway_http().await {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    } else {
+        false
+    };
+    
+    // Gateway is running if port is occupied AND HTTP check passes
+    let running = pid.is_some() && http_ok;
     
     Ok(ServiceStatus {
         running,
@@ -138,15 +146,71 @@ pub async fn get_service_status() -> Result<ServiceStatus, String> {
     })
 }
 
+/// Check if gateway responds to HTTP requests (async version)
+/// This is a lightweight check that doesn't require file system access
+async fn check_gateway_http() -> Result<(), String> {
+    check_gateway_http_internal()
+}
+
+/// Check if gateway responds to HTTP requests (sync version)
+/// Used in non-async contexts like the supervisor thread
+fn check_gateway_http_sync() -> bool {
+    check_gateway_http_internal().is_ok()
+}
+
+/// Internal implementation for HTTP gateway check
+fn check_gateway_http_internal() -> Result<(), String> {
+    use std::time::Duration;
+    use std::net::TcpStream;
+    use std::io::{Write, Read};
+    
+    // Try to connect to the gateway
+    let addr = format!("127.0.0.1:{}", SERVICE_PORT);
+    match TcpStream::connect(&addr) {
+        Ok(mut stream) => {
+            // Set read timeout
+            stream.set_read_timeout(Some(Duration::from_millis(2000)))
+                .map_err(|e| format!("Failed to set timeout: {}", e))?;
+            
+            // Send a simple HTTP GET request
+            let request = format!(
+                "GET / HTTP/1.1\r\nHost: localhost:{}\r\nConnection: close\r\n\r\n",
+                SERVICE_PORT
+            );
+            stream.write_all(request.as_bytes())
+                .map_err(|e| format!("Failed to send request: {}", e))?;
+            
+            // Read response
+            let mut buffer = [0u8; 1024];
+            match stream.read(&mut buffer) {
+                Ok(n) if n > 0 => {
+                    let response = String::from_utf8_lossy(&buffer[..n]);
+                    // Check if we got any HTTP response
+                    if response.contains("HTTP/1.1") || response.contains("<!DOCTYPE") || response.contains("<html") {
+                        Ok(())
+                    } else {
+                        Err("Invalid response".to_string())
+                    }
+                }
+                _ => Err("No response".to_string()),
+            }
+        }
+        Err(e) => Err(format!("Connection failed: {}", e)),
+    }
+}
+
 /// Start service
 #[command]
 pub async fn start_service() -> Result<String, String> {
     info!("[Service] Starting service...");
 
-    // Check if already running via health check
-    let health_ok = shell::run_openclaw(&["gateway", "health", "--timeout", "2000"]).is_ok();
-    if health_ok {
-        info!("[Service] Service is already running (health check passed)");
+    // Check if already running via port check and HTTP check
+    // Note: We don't use `openclaw gateway health` here because it requires
+    // access to ~/.openclaw/identity/device-auth.json which may fail due to
+    // sandbox restrictions in some environments.
+    let status = get_service_status().await?;
+    if status.running {
+        info!("[Service] Service is already running (port check and HTTP check passed)");
         return Err("Service is already running".to_string());
     }
 
@@ -199,16 +263,18 @@ pub async fn start_service() -> Result<String, String> {
         return Err("Service start timeout: port not listening after 15s".to_string());
     }
 
-    // Phase 2: Verify gateway is healthy (one attempt with generous timeout)
-    info!("[Service] Verifying gateway health...");
+    // Phase 2: Verify gateway is healthy via HTTP check
+    // Note: We use HTTP check instead of `openclaw gateway health` to avoid
+    // sandbox restrictions on accessing ~/.openclaw/identity/device-auth.json
+    info!("[Service] Verifying gateway health via HTTP check...");
     std::thread::sleep(std::time::Duration::from_secs(2));
-    let health_ok = shell::run_openclaw(&["gateway", "health", "--timeout", "5000"]).is_ok();
+    let http_ok = check_gateway_http_sync();
     let pid = check_port_listening(SERVICE_PORT);
 
-    if health_ok {
+    if http_ok {
         info!("[Service] Gateway is healthy!");
     } else {
-        warn!("[Service] Gateway health check failed, port is active but gateway may still be initializing");
+        warn!("[Service] Gateway HTTP check failed, port is active but gateway may still be initializing");
     }
 
     // Reset stop flag
@@ -226,9 +292,9 @@ pub async fn start_service() -> Result<String, String> {
                 break;
             }
 
-            // Check if service is running via health check
-            if shell::run_openclaw(&["gateway", "health", "--timeout", "3000"]).is_err() {
-                warn!("[Service Supervisor] Gateway health check failed! Restarting...");
+            // Check if service is running via HTTP check
+            if !check_gateway_http_sync() {
+                warn!("[Service Supervisor] Gateway HTTP check failed! Restarting...");
                 
                 // Double check flag just in case
                 if INTENTIONAL_STOP.load(Ordering::Relaxed) { break; }

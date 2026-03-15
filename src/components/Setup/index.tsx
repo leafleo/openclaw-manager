@@ -83,7 +83,7 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
     setError(null);
 
     try {
-      // Try direct installation first
+      // Install from local bundle
       const result = await invoke<InstallResult>('install_nodejs');
 
       if (result.success) {
@@ -94,18 +94,12 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
         // Need to restart application
         setError('Node.js 安装完成，请重启应用以使环境变量生效');
       } else {
-        // Open terminal for manual installation
-        await invoke<string>('open_install_terminal', { installType: 'nodejs' });
-        setError('安装终端已打开，请在终端中完成安装，然后点击"重新检查"');
+        setupLogger.error('Node.js 安装失败', result.error);
+        setError(`安装失败: ${result.error || result.message}`);
       }
     } catch (e) {
-      // If automatic installation fails, open terminal
-      try {
-        await invoke<string>('open_install_terminal', { installType: 'nodejs' });
-        setError('安装终端已打开，请在终端中完成安装，然后点击"重新检查"');
-      } catch (termErr) {
-        setError(`安装失败: ${e}. ${termErr}`);
-      }
+      setupLogger.error('Node.js 安装失败', e);
+      setError(`安装失败: ${e}`);
     } finally {
       setInstalling(null);
     }
@@ -118,6 +112,7 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
     setError(null);
 
     try {
+      // Install from local bundle
       const result = await invoke<InstallResult>('install_openclaw');
 
       if (result.success) {
@@ -128,19 +123,12 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
         // Re-check environment
         await checkEnvironment();
       } else {
-        setupLogger.warn('自动安装失败，打开终端进行手动安装');
-        // Open terminal for manual installation
-        await invoke<string>('open_install_terminal', { installType: 'openclaw' });
-        setError('安装终端已打开，请在终端中完成安装，然后点击"重新检查"');
+        setupLogger.error('OpenClaw 安装失败', result.error);
+        setError(`安装失败: ${result.error || result.message}`);
       }
     } catch (e) {
-      setupLogger.error('安装失败，尝试打开终端', e);
-      try {
-        await invoke<string>('open_install_terminal', { installType: 'openclaw' });
-        setError('安装终端已打开，请在终端中完成安装，然后点击"重新检查"');
-      } catch (termErr) {
-        setError(`安装失败: ${e}. ${termErr}`);
-      }
+      setupLogger.error('OpenClaw 安装失败', e);
+      setError(`安装失败: ${e}`);
     } finally {
       setInstalling(null);
     }

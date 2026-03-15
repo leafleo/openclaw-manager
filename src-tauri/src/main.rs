@@ -100,17 +100,15 @@ fn main() {
             diagnostics::test_channel,
             diagnostics::get_system_info,
             diagnostics::start_channel_login,
-            // Installer
+            // Installer - Local bundle installation
             installer::check_environment,
             installer::install_nodejs,
+            installer::install_git,
             installer::install_openclaw,
+            installer::install_all_from_local,
             installer::init_openclaw_config,
-            installer::open_install_terminal,
             installer::uninstall_openclaw,
             installer::install_gateway_service,
-            // Version update
-            installer::check_openclaw_update,
-            installer::update_openclaw,
             // Skills management
             skills::get_skills,
             skills::check_clawhub_installed,
