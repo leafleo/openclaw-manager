@@ -2613,8 +2613,8 @@ pub async fn get_agents_config() -> Result<AgentsConfigResponse, String> {
         .or_else(|| config.pointer("/agents/bindings").and_then(|v| v.as_array()));
     
     if let Some(bindings_arr) = bindings_arr {
+        let empty_match = json!({});
         for binding_val in bindings_arr {
-            let empty_match = json!({});
             let match_obj = binding_val.get("match").unwrap_or(&empty_match);
             
             bindings.push(AgentBinding {
