@@ -761,7 +761,17 @@ git config --global url."https://github.com/" insteadOf "ssh://git@github.com/" 
 
 # Set Alibaba Cloud npm registry
 npm config set registry https://registry.npmmirror.com/
-npm install -g openclaw@latest --unsafe-perm
+
+# Configure npm to use HTTPS for git dependencies
+npm config set git-protocol https
+npm config set strict-peer-dependencies false
+
+# Increase timeout for better network resilience
+npm config set fetch-retry-mintimeout 60000
+npm config set fetch-retry-maxtimeout 120000
+
+# Install OpenClaw with verbose output for debugging
+npm install -g openclaw@latest --unsafe-perm --verbose
 
 # Verify installation
 $openclawVersion = openclaw --version 2>$null
@@ -815,7 +825,17 @@ git config --global url."https://github.com/" insteadOf "ssh://git@github.com/" 
 
 # Set Alibaba Cloud npm registry
 npm config set registry https://registry.npmmirror.com/
-npm install -g openclaw@latest --unsafe-perm
+
+# Configure npm to use HTTPS for git dependencies
+npm config set git-protocol https
+npm config set strict-peer-dependencies false
+
+# Increase timeout for better network resilience
+npm config set fetch-retry-mintimeout 60000
+npm config set fetch-retry-maxtimeout 120000
+
+# Install OpenClaw with verbose output for debugging
+npm install -g openclaw@latest --unsafe-perm --verbose
 
 # Verify installation
 openclaw --version
