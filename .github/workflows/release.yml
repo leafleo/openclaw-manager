@@ -207,6 +207,20 @@ jobs:
             throw "Failed to prepare a valid offline bundle after $MaxAttempts attempts."
           }
 
+          # Install WiX Toolset
+          Write-Output "Installing WiX Toolset..."
+          $wixUrl = "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip"
+          $wixZip = "wix314-binaries.zip"
+          $wixDir = "C:\wix314"
+          
+          Invoke-WebRequest -Uri $wixUrl -OutFile $wixZip
+          Expand-Archive -Path $wixZip -DestinationPath $wixDir
+          Remove-Item $wixZip
+          
+          # Add WiX to PATH
+          $env:PATH += ";$wixDir"
+          Write-Output "WiX Toolset installed at: $wixDir"
+
           Invoke-PrepareBundleWithRetry
 
           $msiLog = "windows-msi-build.log"

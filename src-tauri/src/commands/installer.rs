@@ -510,6 +510,13 @@ read -p "Press Enter to close this window..."
 
 /// Get openclaw-bundle directory (bundle/resources/openclaw-bundle)
 fn get_openclaw_bundle_dir() -> Result<String, String> {
+    // Check if OPENCLAW_BUNDLE_DIR environment variable is set
+    if let Ok(bundle_dir) = std::env::var("OPENCLAW_BUNDLE_DIR") {
+        info!("[Bundle Install] Using OpenClaw bundle directory from environment: {}", bundle_dir);
+        return Ok(bundle_dir);
+    }
+    
+    // Fallback to default path
     let exe_path = std::env::current_exe()
         .map_err(|e| format!("Failed to get executable path: {}", e))?;
     
@@ -519,7 +526,7 @@ fn get_openclaw_bundle_dir() -> Result<String, String> {
     let bundle_dir = exe_dir.join("bundle").join("resources").join("openclaw-bundle");
     
     let path = bundle_dir.to_string_lossy().to_string();
-    info!("[Bundle Install] OpenClaw bundle directory: {}", path);
+    info!("[Bundle Install] OpenClaw bundle directory (default): {}", path);
     
     Ok(path)
 }
