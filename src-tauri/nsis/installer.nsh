@@ -1,5 +1,8 @@
 !include "${NSISDIR}\Include\MUI2.nsh"
 
+SetCompressor lzma
+SetCompressorDictSize 64
+
 ; 包含默认页面
 ; 欢迎页面
 !define MUI_PAGE_CUSTOMFUNCTION_PRE WelcomePagePre
