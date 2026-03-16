@@ -12,6 +12,7 @@ permissions:
 jobs:
   build:
     name: build-${{ matrix.platform }}
+    environment: dev  # 指定使用 dev 环境的 
     runs-on: ${{ matrix.os }}
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
