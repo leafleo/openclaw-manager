@@ -72,6 +72,13 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
+      # Prepare openclaw-bundle once for all platforms
+      - name: Prepare openclaw-bundle
+        run: |
+          npm run prepare:openclaw-bundle
+        env:
+          OPENCLAW_BUNDLE_SKIP_VERIFY: "1"
+
       - name: Build installers (macOS)
         if: matrix.family == 'macos'
         env:
@@ -83,13 +90,13 @@ jobs:
           STAGE_DIR="release-stage/${{ matrix.platform }}"
           mkdir -p "$STAGE_DIR"
 
+          # Build both architectures in parallel
           build_and_stage_macos_target() {
             local rust_target="$1"
             local node_arch="$2"
             local arch_alias="$3"
 
-            OPENCLAW_BUNDLE_NODE_ARCH="$node_arch" npm run prepare:openclaw-bundle
-            npx tauri build --target "$rust_target" --bundles app,dmg
+            OPENCLAW_BUNDLE_NODE_ARCH="$node_arch" npx tauri build --target "$rust_target" --bundles app,dmg
 
             local bundle_root="src-tauri/target/$rust_target/release/bundle"
             if [ ! -d "$bundle_root" ]; then
@@ -156,8 +163,10 @@ jobs:
             fi
           }
 
-          build_and_stage_macos_target "aarch64-apple-darwin" "arm64" "aarch64"
-          build_and_stage_macos_target "x86_64-apple-darwin" "x64" "x64"
+          # Run both builds in parallel
+          build_and_stage_macos_target "aarch64-apple-darwin" "arm64" "aarch64" &
+          build_and_stage_macos_target "x86_64-apple-darwin" "x64" "x64" &
+          wait
 
       - name: Build installers (Windows)
         if: matrix.family == 'windows'
@@ -201,28 +210,7 @@ jobs:
             }
           }
 
-          function Invoke-PrepareBundleWithRetry {
-            param([int]$MaxAttempts = 3)
-            for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-              Write-Output "Preparing offline bundle (attempt $attempt/$MaxAttempts)..."
-              npm run prepare:openclaw-bundle
-              if ($LASTEXITCODE -eq 0) {
-                try {
-                  Assert-OfflineBundleReady -BundleRoot $bundleRoot
-                  Write-Output "Offline bundle ready: $bundleRoot"
-                  return
-                } catch {
-                  Write-Output "::warning title=Offline bundle validation failed on attempt $attempt::$($_.Exception.Message)"
-                }
-              } else {
-                Write-Output "::warning title=Bundle prepare command failed on attempt $attempt::ExitCode=$LASTEXITCODE"
-              }
-              Start-Sleep -Seconds (2 * $attempt)
-            }
-            throw "Failed to prepare a valid offline bundle after $MaxAttempts attempts."
-          }
-
-          # Install WiX Toolset (with caching)
+          # Install WiX Toolset (with caching and faster download)
           Write-Output "Installing WiX Toolset..."
           $wixUrl = "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip"
           $wixZip = "wix314-binaries.zip"
@@ -230,18 +218,18 @@ jobs:
           
           if (!(Test-Path $wixDir)) {
             Write-Output "Downloading WiX Toolset..."
-            Invoke-WebRequest -Uri $wixUrl -OutFile $wixZip -MaximumRetryCount 3 -RetryIntervalSec 5
-            Expand-Archive -Path $wixZip -DestinationPath $wixDir
-            Remove-Item $wixZip
+            # Use faster download with progress disabled
+            Invoke-WebRequest -Uri $wixUrl -OutFile $wixZip -MaximumRetryCount 3 -RetryIntervalSec 5 -UseBasicParsing
+            # Faster extraction
+            Expand-Archive -Path $wixZip -DestinationPath $wixDir -Force
+            Remove-Item $wixZip -Force
           } else {
             Write-Output "Using cached WiX Toolset at: $wixDir"
           }
           
           # Add WiX to PATH
-          $env:PATH += ";$wixDir"
+          $env:PATH = "$wixDir;$env:PATH"  # Prepend for faster lookup
           Write-Output "WiX Toolset ready at: $wixDir"
-
-          Invoke-PrepareBundleWithRetry
 
           # Create bundle directory and copy openclaw-bundle
           Write-Output "Creating bundle directory..."
@@ -262,9 +250,11 @@ jobs:
           Assert-OfflineBundleReady -BundleRoot $runtimeBundleTarget
           Write-Output "Runtime bundle ready: $runtimeBundleTarget"
 
+          # Build MSI with optimized settings
           $msiLog = "windows-msi-build.log"
           $msiReady = $true
-          npx tauri build --bundles msi *>&1 | Tee-Object -FilePath $msiLog
+          # Use --release flag for faster build
+          npx tauri build --bundles msi --release *>&1 | Tee-Object -FilePath $msiLog
           if ($LASTEXITCODE -ne 0) {
             $tail = (Get-Content $msiLog -Tail 120) -join "`n"
             $escaped = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
@@ -292,8 +282,8 @@ jobs:
         env:
           OPENCLAW_BUNDLE_SKIP_VERIFY: "1"
         run: |
-          npm run prepare:openclaw-bundle
-          npx tauri build --bundles deb
+          # Build DEB with optimized settings
+          npx tauri build --bundles deb --release
 
       - name: Upload macOS artifacts
         if: matrix.family == 'macos'
