@@ -35,10 +35,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache Node.js dependencies
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-rust-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -207,21 +222,45 @@ jobs:
             throw "Failed to prepare a valid offline bundle after $MaxAttempts attempts."
           }
 
-          # Install WiX Toolset
+          # Install WiX Toolset (with caching)
           Write-Output "Installing WiX Toolset..."
           $wixUrl = "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip"
           $wixZip = "wix314-binaries.zip"
           $wixDir = "C:\wix314"
           
-          Invoke-WebRequest -Uri $wixUrl -OutFile $wixZip
-          Expand-Archive -Path $wixZip -DestinationPath $wixDir
-          Remove-Item $wixZip
+          if (!(Test-Path $wixDir)) {
+            Write-Output "Downloading WiX Toolset..."
+            Invoke-WebRequest -Uri $wixUrl -OutFile $wixZip -MaximumRetryCount 3 -RetryIntervalSec 5
+            Expand-Archive -Path $wixZip -DestinationPath $wixDir
+            Remove-Item $wixZip
+          } else {
+            Write-Output "Using cached WiX Toolset at: $wixDir"
+          }
           
           # Add WiX to PATH
           $env:PATH += ";$wixDir"
-          Write-Output "WiX Toolset installed at: $wixDir"
+          Write-Output "WiX Toolset ready at: $wixDir"
 
           Invoke-PrepareBundleWithRetry
+
+          # Create bundle directory and copy openclaw-bundle
+          Write-Output "Creating bundle directory..."
+          $runtimeBundlesDir = "src-tauri/bundle"
+          if (!(Test-Path $runtimeBundlesDir)) {
+            New-Item -ItemType Directory -Path $runtimeBundlesDir -Force
+          }
+          
+          # Copy openclaw-bundle to bundle
+          Write-Output "Copying openclaw-bundle to bundle..."
+          $runtimeBundleTarget = Join-Path $runtimeBundlesDir "openclaw-bundle"
+          if (Test-Path $runtimeBundleTarget) {
+            Remove-Item -Path $runtimeBundleTarget -Recurse -Force
+          }
+          Copy-Item -Path $bundleRoot -Destination $runtimeBundleTarget -Recurse -Force
+          
+          # Verify the copy was successful
+          Assert-OfflineBundleReady -BundleRoot $runtimeBundleTarget
+          Write-Output "Runtime bundle ready: $runtimeBundleTarget"
 
           $msiLog = "windows-msi-build.log"
           $msiReady = $true

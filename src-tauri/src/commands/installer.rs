@@ -508,7 +508,7 @@ read -p "Press Enter to close this window..."
     Err("Unable to launch terminal. Please open a terminal and run: sudo openclaw gateway install".to_string())
 }
 
-/// Get openclaw-bundle directory (bundle/resources/openclaw-bundle)
+/// Get openclaw-bundle directory
 fn get_openclaw_bundle_dir() -> Result<String, String> {
     // Check if OPENCLAW_BUNDLE_DIR environment variable is set
     if let Ok(bundle_dir) = std::env::var("OPENCLAW_BUNDLE_DIR") {
@@ -516,19 +516,33 @@ fn get_openclaw_bundle_dir() -> Result<String, String> {
         return Ok(bundle_dir);
     }
     
-    // Fallback to default path
+    // Fallback to default paths
     let exe_path = std::env::current_exe()
         .map_err(|e| format!("Failed to get executable path: {}", e))?;
     
     let exe_dir = exe_path.parent()
         .ok_or("Failed to get executable directory")?;
     
+    // Check runtime-bundles directory first (for installed version)
+    let runtime_bundles_dir = exe_dir.join("runtime-bundles");
+    if runtime_bundles_dir.exists() {
+        let path = runtime_bundles_dir.to_string_lossy().to_string();
+        info!("[Bundle Install] OpenClaw bundle directory (runtime-bundles): {}", path);
+        return Ok(path);
+    }
+    
+    // Check bundle/resources/openclaw-bundle (for development version)
     let bundle_dir = exe_dir.join("bundle").join("resources").join("openclaw-bundle");
+    if bundle_dir.exists() {
+        let path = bundle_dir.to_string_lossy().to_string();
+        info!("[Bundle Install] OpenClaw bundle directory (bundle/resources): {}", path);
+        return Ok(path);
+    }
     
-    let path = bundle_dir.to_string_lossy().to_string();
-    info!("[Bundle Install] OpenClaw bundle directory (default): {}", path);
-    
-    Ok(path)
+    // Both paths don't exist, return error
+    let runtime_path = runtime_bundles_dir.to_string_lossy().to_string();
+    let bundle_path = bundle_dir.to_string_lossy().to_string();
+    Err(format!("Runtime bundles directory not found. Tried: \n1. {}\n2. {}", runtime_path, bundle_path))
 }
 
 /// Bundle manifest structure
@@ -1293,12 +1307,12 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), test_path);
         
-        // Test without environment variable (should use default path)
+        // Test without environment variable (should return error since directories don't exist)
         std::env::remove_var("OPENCLAW_BUNDLE_DIR");
         let result = get_openclaw_bundle_dir();
-        assert!(result.is_ok());
-        let bundle_dir = result.unwrap();
-        assert!(bundle_dir.contains("bundle/resources/openclaw-bundle"));
+        // In test environment, neither runtime-bundles nor bundle/resources/openclaw-bundle exists
+        // So the function should return an error
+        assert!(result.is_err());
     }
 
     // Test check_environment function

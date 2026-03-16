@@ -41,7 +41,8 @@
       "rpm"
     ],
     "resources": [
-      "bundle/resources/**/*"
+      "bundle/resources/**/*",
+      "runtime-bundles/**/*"
     ],
     "icon": [
       "icons/32x32.png",
