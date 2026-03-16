@@ -662,6 +662,39 @@ async fn install_nodejs_windows(
 
     let node_dir_win = node_dir.replace('/', "\\");
     let npm_bin_dir_win = npm_bin_dir.replace('/', "\\");
+    let npm_dir_win = npm_bin_dir_win.replace("\\bin", "");
+
+    // Create node_modules directory and symlink npm
+    let symlink_script = format!(
+        r#"
+        $nodeDir = "{}"
+        $npmDir = "{}"
+        
+        # Create node_modules directory if it doesn't exist
+        $nodeModulesDir = Join-Path $nodeDir "node_modules"
+        if (-not (Test-Path $nodeModulesDir)) {{
+            New-Item -ItemType Directory -Force -Path $nodeModulesDir | Out-Null
+            Write-Host "Created node_modules directory"
+        }}
+        
+        # Create symlink from npm to node/node_modules/npm
+        $npmSymlinkPath = Join-Path $nodeModulesDir "npm"
+        if (-not (Test-Path $npmSymlinkPath)) {{
+            New-Item -ItemType Junction -Path $npmSymlinkPath -Target $npmDir | Out-Null
+            Write-Host "Created symlink from $npmSymlinkPath to $npmDir"
+        }}
+        "#,
+        node_dir_win, npm_dir_win
+    );
+
+    match shell::run_powershell_output(&symlink_script) {
+        Ok(output) => {
+            info!("[Windows Node Install] Symlinks created: {}", output);
+        }
+        Err(e) => {
+            warn!("[Windows Node Install] Symlink creation warning: {}", e);
+        }
+    }
 
     let env_script = format!(
         r#"
@@ -756,7 +789,7 @@ async fn install_openclaw_windows(
         let prefix_script = format!(
             r#"
             $nodePath = "{}\node.exe"
-            $npmCliPath = "{}\npm-cli.js"
+            $npmPath = "{}\npm"
             $prefixPath = "{}"
             $cachePath = "{}"
 
@@ -766,12 +799,12 @@ async fn install_openclaw_windows(
             $openclawCmd = Join-Path $prefixPath "openclaw.cmd"
             if (Test-Path $openclawCmd) {{
                 Write-Host "OpenClaw already available in prefix"
-                & $nodePath $npmCliPath config set prefix $prefixPath --global --cache $cachePath
+                & $nodePath $npmPath config set prefix $prefixPath --global --cache $cachePath
                 exit 0
             }}
 
             # Install from cache
-            & $nodePath $npmCliPath install --global --prefix $prefixPath --cache $cachePath --offline --no-audit --no-fund "{}"
+            & $nodePath $npmPath install --global --prefix $prefixPath --cache $cachePath --offline --no-audit --no-fund "{}"
             if ($LASTEXITCODE -ne 0) {{
                 Write-Error "Offline npm install failed"
                 exit 1
@@ -799,18 +832,18 @@ async fn install_openclaw_windows(
         let fresh_install_script = format!(
             r#"
             $nodePath = "{}\node.exe"
-            $npmCliPath = "{}\npm-cli.js"
+            $npmPath = "{}\npm"
             $prefixPath = "{}"
             $cachePath = "{}"
             $tgzPath = "{}"
 
             $env:PATH = "{};" + $env:PATH
 
-            if (-not (Test-Path $prefixPath)) {{
+            if (-not (Test-Path $prefixPath)) {
                 New-Item -ItemType Directory -Force -Path $prefixPath | Out-Null
-            }}
+            }
 
-            & $nodePath $npmCliPath install --global --prefix $prefixPath --cache $cachePath --offline --no-audit --no-fund "$tgzPath"
+            & $nodePath $npmPath install --global --prefix $prefixPath --cache $cachePath --offline --no-audit --no-fund "$tgzPath"
             if ($LASTEXITCODE -ne 0) {{
                 Write-Error "Offline npm install failed"
                 exit 1
@@ -907,6 +940,31 @@ async fn install_nodejs_unix(
     npm_bin_dir: &str,
 ) -> Result<InstallResult, String> {
     info!("[Unix Node Install] Setting up environment variables...");
+
+    // Create node_modules directory and symlink npm
+    let npm_dir = npm_bin_dir.replace("/bin", "");
+    let symlink_script = format!(
+        r#"
+# Create node_modules directory if it doesn't exist
+mkdir -p "{}/node_modules"
+
+# Create symlink from npm to node/node_modules/npm
+if [ ! -L "{}/node_modules/npm" ]; then
+    ln -s "{}" "{}/node_modules/npm"
+    echo "Created symlink from {}/node_modules/npm to {}"
+fi
+"#,
+        node_dir, node_dir, npm_dir, node_dir, node_dir, npm_dir
+    );
+
+    match shell::run_bash_output(&symlink_script) {
+        Ok(output) => {
+            info!("[Unix Node Install] Symlinks created: {}", output);
+        }
+        Err(e) => {
+            warn!("[Unix Node Install] Symlink creation warning: {}", e);
+        }
+    }
 
     if let Some(home) = dirs::home_dir() {
         let home_str = home.display().to_string();

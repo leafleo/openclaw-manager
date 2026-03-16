@@ -11,19 +11,57 @@ mod utils;
 use commands::{config, diagnostics, installer, process, service, skills};
 use utils::log_sanitizer;
 use std::io::Write;
+use std::fs::OpenOptions;
+use fern;
 
 fn main() {
     // Initialize logging - show info level logs by default
-    env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or("info")
-    )
-    .format(|buf, record| {
-        let sanitized = log_sanitizer::sanitize(&record.args().to_string());
-        writeln!(buf, "{} [{}] {}", record.level(), record.target(), sanitized)
-    })
-    .init();
+    let log_file = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|p| p.join("logs")))
+        .unwrap_or_else(|| std::path::PathBuf::from("logs"));
+    
+    if !log_file.exists() {
+        std::fs::create_dir_all(&log_file).ok();
+    }
+    
+    let log_path = log_file.join("openclaw-manager.log");
+    
+    // Initialize logging with fern to write to both console and file
+    fern::Dispatch::new()
+        // Write to stdout
+        .chain(std::io::stdout())
+        // Write to log file
+        .chain(
+            fern::log_file(&log_path)
+                .unwrap_or_else(|e| {
+                    eprintln!("Failed to open log file: {}", e);
+                    // Fallback to stdout if file fails
+                    std::io::stdout()
+                })
+        )
+        // Set log level
+        .level(log::LevelFilter::Info)
+        // Format log messages
+        .format(|out, message, record| {
+            let sanitized = log_sanitizer::sanitize(&message.to_string());
+            out.finish(format_args!(
+                "{} [{}] {}",
+                record.level(),
+                record.target(),
+                sanitized
+            ))
+        })
+        // Apply configuration
+        .apply()
+        .unwrap_or_else(|e| {
+            eprintln!("Failed to initialize logger: {}", e);
+            // Fallback to env_logger if fern fails
+            env_logger::init();
+        });
     
     log::info!("🦞 OpenClaw Manager started");
+    log::info!("Log file: {}", log_path.display());
 
     tauri::Builder::default()
         .setup(|app| {
