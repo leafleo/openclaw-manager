@@ -1,8 +1,5 @@
 !include "${NSISDIR}\Include\MUI2.nsh"
 
-; 继承默认的 Tauri NSIS 脚本
-!include "${TAURI_DIR}\nsis\common.nsh"
-
 ; 自定义安装页面
 !define MUI_PAGE_CUSTOMFUNCTION_PRE WelcomePagePre
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE WelcomePageLeave
@@ -16,7 +13,7 @@
 
 ; 包含默认页面
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "${TAURI_DIR}\nsis\LICENSE.txt"
+!insertmacro MUI_PAGE_LICENSE "LICENSE.txt"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
