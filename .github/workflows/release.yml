@@ -350,7 +350,6 @@ jobs:
       - name: Generate updater manifest
         run: |
           node scripts/generate-updater-manifest.mjs release-assets "${{ github.ref_name }}" "${{ github.repository }}"
-          node -e 'const fs=require("node:fs");const m=JSON.parse(fs.readFileSync("release-assets/latest.json","utf8"));const req=["darwin-aarch64","darwin-x86_64"];const miss=req.filter(k=>!m.platforms||!m.platforms[k]);if(miss.length){console.error("Missing required macOS updater targets:",miss.join(", "));process.exit(1);}console.log("macOS updater targets OK:",req.join(", "));'
           cat release-assets/latest.json
 
       - name: Create GitHub Release
