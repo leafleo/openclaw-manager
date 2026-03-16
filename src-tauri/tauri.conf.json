@@ -63,12 +63,7 @@
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": "",
-      "nsis": {
-        "template": "nsis/installer.nsh",
-        "installMode": "perMachine",
-        "displayLanguageSelector": false
-      }
+      "timestampUrl": ""
     },
     "linux": {
       "appimage": {
