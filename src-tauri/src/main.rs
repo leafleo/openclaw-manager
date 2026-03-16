@@ -28,19 +28,19 @@ fn main() {
     let log_path = log_file.join("openclaw-manager.log");
     
     // Initialize logging with fern to write to both console and file
-    fern::Dispatch::new()
+    let mut dispatch = fern::Dispatch::new()
         // Write to stdout
-        .chain(std::io::stdout())
-        // Write to log file
-        .chain(
-            fern::log_file(&log_path)
-                .unwrap_or_else(|e| {
-                    eprintln!("Failed to open log file: {}", e);
-                    // Fallback to stdout if file fails
-                    std::io::stdout()
-                })
-        )
-        // Set log level
+        .chain(std::io::stdout());
+    
+    // Try to add file logging
+    if let Ok(file) = fern::log_file(&log_path) {
+        dispatch = dispatch.chain(file);
+    } else {
+        eprintln!("Failed to open log file: {}", log_path.display());
+    }
+    
+    // Set log level and format
+    dispatch
         .level(log::LevelFilter::Info)
         // Format log messages
         .format(|out, message, record| {

@@ -75,9 +75,14 @@ pub async fn get_skills() -> Result<Vec<Skill>, String> {
 }
 
 fn create_command(program: &str) -> Command {
-    let mut cmd = Command::new(program);
+    let cmd = Command::new(program);
     #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    {
+        let mut cmd = cmd;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd
+    }
+    #[cfg(not(target_os = "windows"))]
     cmd
 }
 

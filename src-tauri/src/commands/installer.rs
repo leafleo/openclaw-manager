@@ -549,20 +549,20 @@ fn get_openclaw_bundle_dir() -> Result<String, String> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct BundleManifest {
     name: String,
-    generated_at: String,
-    openclaw_version: Option<String>,
-    node_version: Option<String>,
-    node_platform: Option<String>,
-    prefix_available: Option<bool>,
+    generatedAt: String,
+    openclawVersion: Option<String>,
+    nodeVersion: Option<String>,
+    nodePlatform: Option<String>,
+    prefixAvailable: Option<bool>,
     files: BundleFiles,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct BundleFiles {
-    openclaw_tgz: String,
-    npm_cache: String,
+    openclawTgz: String,
+    npmCache: String,
     node: String,
-    npm_cli: String,
+    npmCli: String,
     prefix: Option<String>,
 }
 
@@ -586,9 +586,9 @@ fn get_bundle_info() -> Result<(String, BundleManifest, String, String, String, 
         .map_err(|e| format!("Failed to parse manifest.json: {}", e))?;
     
     let node_path = format!("{}/{}", bundle_dir, manifest.files.node);
-    let npm_cli_path = format!("{}/{}", bundle_dir, manifest.files.npm_cli);
-    let npm_cache_path = format!("{}/{}", bundle_dir, manifest.files.npm_cache);
-    let openclaw_tgz_path = format!("{}/{}", bundle_dir, manifest.files.openclaw_tgz);
+    let npm_cli_path = format!("{}/{}", bundle_dir, manifest.files.npmCli);
+    let npm_cache_path = format!("{}/{}", bundle_dir, manifest.files.npmCache);
+    let openclaw_tgz_path = format!("{}/{}", bundle_dir, manifest.files.openclawTgz);
 
     if !Path::new(&node_path).exists() {
         return Err(format!("Node.js not found: {}", node_path));
@@ -781,7 +781,7 @@ async fn install_openclaw_windows(
     let bundle_dir_win = bundle_dir.replace('/', "\\");
 
     let install_prefix = format!("{}\\prefix", bundle_dir_win);
-    let prefix_available = manifest.prefix_available.unwrap_or(false);
+    let prefix_available = manifest.prefixAvailable.unwrap_or(false);
 
     if prefix_available && Path::new(&install_prefix).exists() {
         info!("[Windows OpenClaw Install] Using pre-built prefix for offline install...");
@@ -839,9 +839,9 @@ async fn install_openclaw_windows(
 
             $env:PATH = "{};" + $env:PATH
 
-            if (-not (Test-Path $prefixPath)) {
+            if (-not (Test-Path $prefixPath)) {{
                 New-Item -ItemType Directory -Force -Path $prefixPath | Out-Null
-            }
+            }}
 
             & $nodePath $npmPath install --global --prefix $prefixPath --cache $cachePath --offline --no-audit --no-fund "$tgzPath"
             if ($LASTEXITCODE -ne 0) {{
@@ -1049,7 +1049,7 @@ async fn install_openclaw_unix(
     info!("[Unix OpenClaw Install] Starting OpenClaw installation...");
 
     let install_prefix = format!("{}/prefix", bundle_dir);
-    let prefix_available = manifest.prefix_available.unwrap_or(false);
+    let prefix_available = manifest.prefixAvailable.unwrap_or(false);
 
     let node_exe = format!("{}/node", node_dir);
     let npm_cli = format!("{}/npm-cli.js", npm_bin_dir);
