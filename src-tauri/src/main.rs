@@ -103,7 +103,6 @@ fn main() {
             // Installer - Local bundle installation
             installer::check_environment,
             installer::install_nodejs,
-            installer::install_git,
             installer::install_openclaw,
             installer::install_all_from_local,
             installer::init_openclaw_config,

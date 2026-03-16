@@ -112,7 +112,7 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
     setError(null);
 
     try {
-      // Install from local bundle
+      // Install OpenClaw from local bundle (requires Node.js to be installed first)
       const result = await invoke<InstallResult>('install_openclaw');
 
       if (result.success) {

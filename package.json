@@ -1,5 +1,5 @@
 {
-  "name": "openclaw-manager",
+  "name": "openclaw-desktop",
   "version": "0.0.19",
   "description": "🦞 OpenClaw Cross-Platform Manager - High-Performance AI Assistant Configuration & Service Management",
   "author": "OpenClaw Team",
@@ -9,6 +9,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "prepare:openclaw-bundle": "node scripts/prepare-openclaw-bundle.mjs",
     "tauri": "tauri",
     "tauri:dev": "PATH=~/.cargo/bin:$PATH tauri dev",
     "tauri:build": "PATH=~/.cargo/bin:$PATH RUST_LOG=info tauri build",

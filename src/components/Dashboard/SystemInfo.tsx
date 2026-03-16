@@ -103,6 +103,7 @@ export function SystemInfo() {
     setInstalling('openclaw');
     setError(null);
     try {
+      // Install OpenClaw from local bundle (requires Node.js to be installed first)
       const result = await invoke<InstallResult>('install_openclaw');
       if (result.success) {
         await invoke<InstallResult>('init_openclaw_config');

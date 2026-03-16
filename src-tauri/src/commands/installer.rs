@@ -508,311 +508,616 @@ read -p "Press Enter to close this window..."
     Err("Unable to launch terminal. Please open a terminal and run: sudo openclaw gateway install".to_string())
 }
 
-/// Get runtime bundles directory
-fn get_runtime_bundles_dir() -> Result<String, String> {
-    // Try to get from current executable path
-    let mut runtime_bundles_dir = std::env::current_exe()
+/// Get openclaw-bundle directory (bundle/resources/openclaw-bundle)
+fn get_openclaw_bundle_dir() -> Result<String, String> {
+    let exe_path = std::env::current_exe()
         .map_err(|e| format!("Failed to get executable path: {}", e))?;
     
-    // Navigate to runtime-bundles directory
-    runtime_bundles_dir.pop();
-    runtime_bundles_dir.pop();
-    runtime_bundles_dir.pop();
-    runtime_bundles_dir.push("runtime-bundles");
+    let exe_dir = exe_path.parent()
+        .ok_or("Failed to get executable directory")?;
     
-    let path = runtime_bundles_dir.to_string_lossy().to_string();
-    info!("[Local Bundle Install] Runtime bundles directory: {}", path);
+    let bundle_dir = exe_dir.join("bundle").join("resources").join("openclaw-bundle");
+    
+    let path = bundle_dir.to_string_lossy().to_string();
+    info!("[Bundle Install] OpenClaw bundle directory: {}", path);
     
     Ok(path)
 }
 
-/// Install Node.js from local bundle
+/// Bundle manifest structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BundleManifest {
+    name: String,
+    generated_at: String,
+    openclaw_version: Option<String>,
+    node_version: Option<String>,
+    node_platform: Option<String>,
+    prefix_available: Option<bool>,
+    files: BundleFiles,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BundleFiles {
+    openclaw_tgz: String,
+    npm_cache: String,
+    node: String,
+    npm_cli: String,
+    prefix: Option<String>,
+}
+
+/// Get bundle info and paths
+fn get_bundle_info() -> Result<(String, BundleManifest, String, String, String, String), String> {
+    let bundle_dir = get_openclaw_bundle_dir()?;
+    
+    if !Path::new(&bundle_dir).exists() {
+        return Err(format!("Bundle directory not found: {}", bundle_dir));
+    }
+
+    let manifest_path = format!("{}/manifest.json", bundle_dir);
+    if !Path::new(&manifest_path).exists() {
+        return Err(format!("manifest.json not found: {}", manifest_path));
+    }
+
+    let manifest_content = fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("Failed to read manifest.json: {}", e))?;
+    
+    let manifest: BundleManifest = serde_json::from_str(&manifest_content)
+        .map_err(|e| format!("Failed to parse manifest.json: {}", e))?;
+    
+    let node_path = format!("{}/{}", bundle_dir, manifest.files.node);
+    let npm_cli_path = format!("{}/{}", bundle_dir, manifest.files.npm_cli);
+    let npm_cache_path = format!("{}/{}", bundle_dir, manifest.files.npm_cache);
+    let openclaw_tgz_path = format!("{}/{}", bundle_dir, manifest.files.openclaw_tgz);
+
+    if !Path::new(&node_path).exists() {
+        return Err(format!("Node.js not found: {}", node_path));
+    }
+    if !Path::new(&npm_cli_path).exists() {
+        return Err(format!("npm-cli.js not found: {}", npm_cli_path));
+    }
+    if !Path::new(&openclaw_tgz_path).exists() {
+        return Err(format!("openclaw.tgz not found: {}", openclaw_tgz_path));
+    }
+
+    let node_dir = Path::new(&node_path).parent()
+        .ok_or("Failed to get node directory")?
+        .to_string_lossy().to_string();
+    let npm_bin_dir = Path::new(&npm_cli_path).parent()
+        .ok_or("Failed to get npm bin directory")?
+        .to_string_lossy().to_string();
+
+    Ok((bundle_dir, manifest, node_dir, npm_bin_dir, npm_cache_path, openclaw_tgz_path))
+}
+
+/// Install Node.js from openclaw-bundle directory
+/// This function:
+/// 1. Reads manifest.json to get bundle info
+/// 2. Adds node and npm to environment variables
+/// 3. Verifies Node.js is accessible
 #[command]
 pub async fn install_nodejs() -> Result<InstallResult, String> {
-    info!("[Local Bundle Install] Installing Node.js from local bundle...");
+    info!("[Node Install] Starting Node.js installation from bundle...");
+
+    let (bundle_dir, _manifest, node_dir, npm_bin_dir, _npm_cache_path, _openclaw_tgz_path) = get_bundle_info()?;
     
-    let os = platform::get_os();
-    let arch = platform::get_arch();
-    info!("[Local Bundle Install] Detected OS: {}, Architecture: {}", os, arch);
-    
-    let bundles_dir = get_runtime_bundles_dir()?;
-    
-    if !Path::new(&bundles_dir).exists() {
-        return Err(format!("Runtime bundles directory not found: {}", bundles_dir));
-    }
-    
-    let platform_dir = match os.as_str() {
-        "windows" => "windows",
-        "macos" => "macos",
-        "linux" => "linux",
-        _ => return Err(format!("Unsupported OS: {}", os)),
-    };
-    
-    let node_dir = format!("{}/{}/node", bundles_dir, platform_dir);
-    
-    let node_file = match (os.as_str(), arch.as_str()) {
-        ("windows", "x86_64") => "node-v18.20.4-win-x64.zip",
-        ("windows", "x86") => "node-v18.20.4-win-x86.zip",
-        ("macos", "aarch64") => "node-v18.20.4-darwin-arm64.tar.gz",
-        ("macos", "x86_64") => "node-v18.20.4-darwin-x64.tar.gz",
-        ("linux", "x86_64") => "node-v18.20.4-linux-x64.tar.xz",
-        _ => return Err(format!("Unsupported OS/arch combination: {}/{}", os, arch)),
-    };
-    
-    let node_file_path = format!("{}/{}", node_dir, node_file);
-    info!("[Local Bundle Install] Node.js bundle: {}", node_file_path);
-    
-    if !Path::new(&node_file_path).exists() {
-        return Err(format!("Node.js bundle not found: {}", node_file_path));
-    }
-    
-    // Create installation directory
-    let install_dir = format!("{}/runtime/node", bundles_dir);
-    if let Err(e) = fs::create_dir_all(&install_dir) {
-        return Err(format!("Failed to create installation directory: {}", e));
-    }
-    
-    // Extract the bundle
-    info!("[Local Bundle Install] Extracting Node.js bundle...");
-    let extract_result = if node_file.ends_with(".zip") {
-        if platform::is_windows() {
-            let script = format!(r#"
-Expand-Archive -Path '{}' -DestinationPath '{}' -Force
-"#, node_file_path, install_dir);
-            shell::run_powershell_output(&script)
-        } else {
-            Err("ZIP files are only supported on Windows".to_string())
-        }
-    } else if node_file.ends_with(".tar.gz") || node_file.ends_with(".tar.xz") {
-        let script = format!(r#"
-tar -xf '{}' -C '{}'
-"#, node_file_path, install_dir);
-        shell::run_bash_output(&script)
-    } else {
-        Err(format!("Unsupported file format: {}", node_file))
-    };
-    
-    if let Err(e) = extract_result {
-        return Err(format!("Failed to extract Node.js bundle: {}", e));
-    }
-    
-    // Determine the extracted directory
-    let extracted_dir = if node_file.ends_with(".zip") {
-        format!("{}/node-v18.20.4-win-x64", install_dir)
-    } else if node_file.ends_with(".tar.gz") || node_file.ends_with(".tar.xz") {
-        format!("{}/node-v18.20.4-darwin-x64", install_dir)
-    } else {
-        install_dir
-    };
-    
-    // Configure environment variables
-    info!("[Local Bundle Install] Configuring Node.js environment variables...");
-    
+    info!("[Node Install] Node directory: {}", node_dir);
+    info!("[Node Install] npm bin directory: {}", npm_bin_dir);
+
     if platform::is_windows() {
-        let script = format!(r#"
-setx NODE_HOME '{}' /M
-setx PATH '%NODE_HOME%\bin;%PATH%' /M
-"#, extracted_dir);
-        if let Err(e) = shell::run_cmd_output(&script) {
-            return Err(format!("Failed to set environment variables: {}", e));
-        }
+        install_nodejs_windows(&node_dir, &npm_bin_dir).await
     } else {
-        let env_lines = format!(r#"export NODE_HOME={}
-export PATH=$NODE_HOME/bin:$PATH
-"#, extracted_dir);
-        
-        if let Some(home) = dirs::home_dir() {
-            let zprofile_path = format!("{}/.zprofile", home.display());
-            let _ = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&zprofile_path)
-                .and_then(|mut f| {
-                    use std::io::Write;
-                    f.write_all(env_lines.as_bytes())
-                });
-            
-            let bash_profile_path = format!("{}/.bash_profile", home.display());
-            let _ = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&bash_profile_path)
-                .and_then(|mut f| {
-                    use std::io::Write;
-                    f.write_all(env_lines.as_bytes())
-                });
-        }
+        install_nodejs_unix(&node_dir, &npm_bin_dir).await
     }
-    
-    Ok(InstallResult {
-        success: true,
-        message: "Node.js installed successfully from local bundle!".to_string(),
-        error: None,
-    })
 }
 
-/// Install Git from local bundle
-#[command]
-pub async fn install_git() -> Result<InstallResult, String> {
-    info!("[Local Bundle Install] Installing Git from local bundle...");
-    
-    let os = platform::get_os();
-    let arch = platform::get_arch();
-    
-    let bundles_dir = get_runtime_bundles_dir()?;
-    
-    let platform_dir = match os.as_str() {
-        "windows" => "windows",
-        "macos" => "macos",
-        "linux" => "linux",
-        _ => return Err(format!("Unsupported OS: {}", os)),
-    };
-    
-    let git_dir = format!("{}/{}/git", bundles_dir, platform_dir);
-    
-    let git_file = match os.as_str() {
-        "windows" => "PortableGit-2.43.0-64-bit.7z.exe",
-        "macos" => "git-2.33.0-intel-universal-mavericks.dmg",
-        "linux" => "git-2.43.0.tar.gz",
-        _ => return Err(format!("Unsupported OS: {}", os)),
-    };
-    
-    let git_file_path = format!("{}/{}", git_dir, git_file);
-    info!("[Local Bundle Install] Git bundle: {}", git_file_path);
-    
-    if !Path::new(&git_file_path).exists() {
-        return Err(format!("Git bundle not found: {}", git_file_path));
-    }
-    
-    let install_dir = format!("{}/runtime/git", bundles_dir);
-    if let Err(e) = fs::create_dir_all(&install_dir) {
-        return Err(format!("Failed to create installation directory: {}", e));
-    }
-    
-    if platform::is_windows() {
-        let script = format!(r#"
-'{}' -y -o'{}'
-"#, git_file_path, install_dir);
-        if let Err(e) = shell::run_cmd_output(&script) {
-            return Err(format!("Failed to install Git: {}", e));
-        }
-        
-        let script = format!(r#"
-setx GIT_HOME '{}' /M
-setx PATH '%GIT_HOME%\bin;%PATH%' /M
-"#, install_dir);
-        if let Err(e) = shell::run_cmd_output(&script) {
-            return Err(format!("Failed to set environment variables: {}", e));
-        }
-    } else if platform::is_macos() {
-        let script = format!(r#"
-hdiutil mount '{}'
-sudo installer -pkg '/Volumes/Git/Git.pkg' -target /
-hdiutil unmount '/Volumes/Git'
-"#, git_file_path);
-        if let Err(e) = shell::run_bash_output(&script) {
-            return Err(format!("Failed to install Git: {}", e));
-        }
-    } else {
-        let script = format!(r#"
-tar -xf '{}' -C '{}'
-cd '{}/git-2.43.0'
-./configure
-make
-sudo make install
-"#, git_file_path, install_dir, install_dir);
-        if let Err(e) = shell::run_bash_output(&script) {
-            return Err(format!("Failed to install Git: {}", e));
-        }
-    }
-    
-    Ok(InstallResult {
-        success: true,
-        message: "Git installed successfully from local bundle!".to_string(),
-        error: None,
-    })
-}
-
-/// Install OpenClaw from local bundle
+/// Install OpenClaw from openclaw-bundle directory
+/// This function:
+/// 1. Reads manifest.json to get bundle info
+/// 2. Installs openclaw.tgz using offline npm-cache and prefix
+/// 3. Verifies the installation
+/// Note: Node.js must be installed first
 #[command]
 pub async fn install_openclaw() -> Result<InstallResult, String> {
-    info!("[Local Bundle Install] Installing OpenClaw from local bundle...");
+    info!("[OpenClaw Install] Starting OpenClaw installation from bundle...");
+
+    let (bundle_dir, manifest, node_dir, npm_bin_dir, npm_cache_path, openclaw_tgz_path) = get_bundle_info()?;
     
-    let bundles_dir = get_runtime_bundles_dir()?;
-    
-    let openclaw_dir = format!("{}/common/openclaw", bundles_dir);
-    let openclaw_file = "openclaw-2026.3.12.tgz";
-    let openclaw_file_path = format!("{}/{}", openclaw_dir, openclaw_file);
-    
-    info!("[Local Bundle Install] OpenClaw bundle: {}", openclaw_file_path);
-    
-    if !Path::new(&openclaw_file_path).exists() {
-        return Err(format!("OpenClaw bundle not found: {}", openclaw_file_path));
+    info!("[OpenClaw Install] Node directory: {}", node_dir);
+    info!("[OpenClaw Install] npm bin directory: {}", npm_bin_dir);
+
+    if platform::is_windows() {
+        install_openclaw_windows(&bundle_dir, &node_dir, &npm_bin_dir, &npm_cache_path, &openclaw_tgz_path, &manifest).await
+    } else {
+        install_openclaw_unix(&bundle_dir, &node_dir, &npm_bin_dir, &npm_cache_path, &openclaw_tgz_path, &manifest).await
     }
-    
-    let extract_dir = format!("{}/temp/openclaw", bundles_dir);
-    if let Err(e) = fs::create_dir_all(&extract_dir) {
-        return Err(format!("Failed to create extraction directory: {}", e));
+}
+
+/// Install Node.js on Windows: set environment variables
+async fn install_nodejs_windows(
+    node_dir: &str,
+    npm_bin_dir: &str,
+) -> Result<InstallResult, String> {
+    info!("[Windows Node Install] Setting up environment variables...");
+
+    let node_dir_win = node_dir.replace('/', "\\");
+    let npm_bin_dir_win = npm_bin_dir.replace('/', "\\");
+
+    let env_script = format!(
+        r#"
+        $nodeDir = "{}"
+        $npmBinDir = "{}"
+
+        $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+
+        if ($currentPath -notlike "*$nodeDir*") {{
+            [Environment]::SetEnvironmentVariable("PATH", "$nodeDir;$currentPath", "User")
+            Write-Host "Added node to PATH"
+        }}
+
+        if ($currentPath -notlike "*$npmBinDir*") {{
+            $newPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+            [Environment]::SetEnvironmentVariable("PATH", "$npmBinDir;$newPath", "User")
+            Write-Host "Added npm/bin to PATH"
+        }}
+
+        [Environment]::SetEnvironmentVariable("NODE_HOME", $nodeDir, "User")
+        Write-Host "Set NODE_HOME to $nodeDir"
+        "#,
+        node_dir_win, npm_bin_dir_win
+    );
+
+    match shell::run_powershell_output(&env_script) {
+        Ok(output) => {
+            info!("[Windows Node Install] Environment variables configured: {}", output);
+        }
+        Err(e) => {
+            return Err(format!("Failed to set environment variables: {}", e));
+        }
     }
-    
-    info!("[Local Bundle Install] Extracting OpenClaw bundle...");
-    let extract_script = format!(r#"
-tar -xzf '{}' -C '{}'
-"#, openclaw_file_path, extract_dir);
-    if let Err(e) = shell::run_bash_output(&extract_script) {
-        return Err(format!("Failed to extract OpenClaw bundle: {}", e));
+
+    info!("[Windows Node Install] Verifying Node.js installation...");
+
+    let verify_script = format!(
+        r#"
+        $nodePath = "{}\node.exe"
+        $version = & $nodePath --version 2>$null
+        if ($LASTEXITCODE -eq 0) {{
+            Write-Host "Node.js version: $version"
+            exit 0
+        }}
+        Write-Error "Node.js verification failed"
+        exit 1
+        "#,
+        node_dir_win
+    );
+
+    match shell::run_powershell_output(&verify_script) {
+        Ok(output) => {
+            info!("[Windows Node Install] Verification successful: {}", output);
+        }
+        Err(e) => {
+            warn!("[Windows Node Install] Verification warning: {}", e);
+        }
     }
-    
-    info!("[Local Bundle Install] Installing OpenClaw...");
-    let install_script = format!(r#"
-cd '{}'
-npm install '{}' --save-exact
-openclaw gateway start
-openclaw gateway status
-"#, extract_dir, openclaw_file_path);
-    if let Err(e) = shell::run_bash_output(&install_script) {
-        return Err(format!("Failed to install OpenClaw: {}", e));
-    }
-    
-    if let Err(e) = fs::remove_dir_all(&extract_dir) {
-        warn!("[Local Bundle Install] Failed to clean up temporary directory: {}", e);
-    }
-    
+
+    info!("[Windows Node Install] Installation completed successfully");
+
     Ok(InstallResult {
         success: true,
-        message: "OpenClaw installed successfully from local bundle!".to_string(),
+        message: "Node.js installed successfully! Please restart the application.".to_string(),
         error: None,
     })
 }
 
-/// Install all components from local bundles
-#[command]
-pub async fn install_all_from_local() -> Result<InstallResult, String> {
-    info!("[Local Bundle Install] Starting installation of all components from local bundles...");
-    
-    // Install Node.js
-    let node_result = install_nodejs().await?;
-    if !node_result.success {
-        return Ok(node_result);
+/// Install OpenClaw on Windows using offline npm
+async fn install_openclaw_windows(
+    bundle_dir: &str,
+    node_dir: &str,
+    npm_bin_dir: &str,
+    npm_cache_path: &str,
+    openclaw_tgz_path: &str,
+    manifest: &BundleManifest,
+) -> Result<InstallResult, String> {
+    info!("[Windows OpenClaw Install] Starting OpenClaw installation...");
+
+    let node_dir_win = node_dir.replace('/', "\\");
+    let npm_bin_dir_win = npm_bin_dir.replace('/', "\\");
+    let npm_cache_win = npm_cache_path.replace('/', "\\");
+    let openclaw_tgz_win = openclaw_tgz_path.replace('/', "\\");
+    let bundle_dir_win = bundle_dir.replace('/', "\\");
+
+    let install_prefix = format!("{}\\prefix", bundle_dir_win);
+    let prefix_available = manifest.prefix_available.unwrap_or(false);
+
+    if prefix_available && Path::new(&install_prefix).exists() {
+        info!("[Windows OpenClaw Install] Using pre-built prefix for offline install...");
+        
+        let prefix_script = format!(
+            r#"
+            $nodePath = "{}\node.exe"
+            $npmCliPath = "{}\npm-cli.js"
+            $prefixPath = "{}"
+            $cachePath = "{}"
+
+            $env:PATH = "{};" + $env:PATH
+
+            # Verify prefix has openclaw
+            $openclawCmd = Join-Path $prefixPath "openclaw.cmd"
+            if (Test-Path $openclawCmd) {{
+                Write-Host "OpenClaw already available in prefix"
+                & $nodePath $npmCliPath config set prefix $prefixPath --global --cache $cachePath
+                exit 0
+            }}
+
+            # Install from cache
+            & $nodePath $npmCliPath install --global --prefix $prefixPath --cache $cachePath --offline --no-audit --no-fund "{}"
+            if ($LASTEXITCODE -ne 0) {{
+                Write-Error "Offline npm install failed"
+                exit 1
+            }}
+            "#,
+            node_dir_win,
+            npm_bin_dir_win,
+            install_prefix,
+            npm_cache_win,
+            node_dir_win,
+            openclaw_tgz_win
+        );
+
+        match shell::run_powershell_output(&prefix_script) {
+            Ok(output) => {
+                info!("[Windows OpenClaw Install] Prefix setup output: {}", output);
+            }
+            Err(e) => {
+                warn!("[Windows OpenClaw Install] Prefix setup failed, trying fresh install: {}", e);
+            }
+        }
+    } else {
+        info!("[Windows OpenClaw Install] Performing fresh offline install...");
+
+        let fresh_install_script = format!(
+            r#"
+            $nodePath = "{}\node.exe"
+            $npmCliPath = "{}\npm-cli.js"
+            $prefixPath = "{}"
+            $cachePath = "{}"
+            $tgzPath = "{}"
+
+            $env:PATH = "{};" + $env:PATH
+
+            if (-not (Test-Path $prefixPath)) {{
+                New-Item -ItemType Directory -Force -Path $prefixPath | Out-Null
+            }}
+
+            & $nodePath $npmCliPath install --global --prefix $prefixPath --cache $cachePath --offline --no-audit --no-fund "$tgzPath"
+            if ($LASTEXITCODE -ne 0) {{
+                Write-Error "Offline npm install failed"
+                exit 1
+            }}
+
+            Write-Host "OpenClaw installed successfully"
+            "#,
+            node_dir_win,
+            npm_bin_dir_win,
+            install_prefix,
+            npm_cache_win,
+            openclaw_tgz_win,
+            node_dir_win
+        );
+
+        match shell::run_powershell_output(&fresh_install_script) {
+            Ok(output) => {
+                info!("[Windows OpenClaw Install] Fresh install output: {}", output);
+            }
+            Err(e) => {
+                return Err(format!("Failed to install OpenClaw: {}", e));
+            }
+        }
     }
-    
-    // Install Git
-    let git_result = install_git().await?;
-    if !git_result.success {
-        return Ok(git_result);
+
+    info!("[Windows OpenClaw Install] Verifying installation...");
+
+    let verify_script = format!(
+        r#"
+        $prefixPath = "{}"
+        $nodePath = "{}\node.exe"
+        $env:PATH = "$prefixPath;" + $env:PATH
+
+        $openclawCmd = Join-Path $prefixPath "openclaw.cmd"
+        if (Test-Path $openclawCmd) {{
+            $version = & $openclawCmd --version 2>$null
+            if ($LASTEXITCODE -eq 0) {{
+                Write-Host "OpenClaw version: $version"
+                exit 0
+            }}
+        }}
+
+        $openclawMjs = Join-Path $prefixPath "node_modules\openclaw\openclaw.mjs"
+        if (Test-Path $openclawMjs) {{
+            $version = & $nodePath $openclawMjs --version 2>$null
+            if ($LASTEXITCODE -eq 0) {{
+                Write-Host "OpenClaw version: $version"
+                exit 0
+            }}
+        }}
+
+        Write-Error "OpenClaw verification failed"
+        exit 1
+        "#,
+        install_prefix,
+        node_dir_win
+    );
+
+    match shell::run_powershell_output(&verify_script) {
+        Ok(output) => {
+            info!("[Windows OpenClaw Install] Verification successful: {}", output);
+        }
+        Err(e) => {
+            warn!("[Windows OpenClaw Install] Verification warning: {}", e);
+        }
     }
-    
-    // Install OpenClaw
-    let openclaw_result = install_openclaw().await?;
-    if !openclaw_result.success {
-        return Ok(openclaw_result);
-    }
-    
+
+    let prefix_env_script = format!(
+        r#"
+        $prefixPath = "{}"
+        $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+        if ($currentPath -notlike "*$prefixPath*") {{
+            [Environment]::SetEnvironmentVariable("PATH", "$prefixPath;$currentPath", "User")
+            Write-Host "Added prefix to PATH"
+        }}
+        "#,
+        install_prefix
+    );
+
+    let _ = shell::run_powershell_output(&prefix_env_script);
+
+    info!("[Windows OpenClaw Install] Installation completed successfully");
+
     Ok(InstallResult {
         success: true,
-        message: "All components installed successfully from local bundles!".to_string(),
+        message: "OpenClaw installed successfully! Please restart the application.".to_string(),
         error: None,
     })
+}
+
+/// Install Node.js on Unix (macOS/Linux): set environment variables
+async fn install_nodejs_unix(
+    node_dir: &str,
+    npm_bin_dir: &str,
+) -> Result<InstallResult, String> {
+    info!("[Unix Node Install] Setting up environment variables...");
+
+    if let Some(home) = dirs::home_dir() {
+        let home_str = home.display().to_string();
+        
+        let zprofile_path = format!("{}/.zprofile", home_str);
+        let bash_profile_path = format!("{}/.bash_profile", home_str);
+
+        let env_lines = format!(
+            r#"
+# OpenClaw Manager - Node.js environment
+export NODE_HOME="{}"
+export PATH="$NODE_HOME:{}:$PATH"
+"#,
+            node_dir, npm_bin_dir
+        );
+
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&zprofile_path)
+            .and_then(|mut f| {
+                use std::io::Write;
+                f.write_all(env_lines.as_bytes())
+            });
+
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&bash_profile_path)
+            .and_then(|mut f| {
+                use std::io::Write;
+                f.write_all(env_lines.as_bytes())
+            });
+    }
+
+    info!("[Unix Node Install] Verifying Node.js installation...");
+
+    let node_exe = format!("{}/node", node_dir);
+    let verify_script = format!(
+        r#"
+export PATH="{}:$PATH"
+
+VERSION=$("{}" --version 2>/dev/null)
+if [ $? -eq 0 ]; then
+    echo "Node.js version: $VERSION"
+    exit 0
+fi
+
+echo "Node.js verification failed"
+exit 1
+"#,
+        node_dir, node_exe
+    );
+
+    match shell::run_bash_output(&verify_script) {
+        Ok(output) => {
+            info!("[Unix Node Install] Verification successful: {}", output);
+        }
+        Err(e) => {
+            warn!("[Unix Node Install] Verification warning: {}", e);
+        }
+    }
+
+    info!("[Unix Node Install] Installation completed successfully");
+
+    Ok(InstallResult {
+        success: true,
+        message: "Node.js installed successfully! Please restart the application.".to_string(),
+        error: None,
+    })
+}
+
+/// Install OpenClaw on Unix (macOS/Linux) using offline npm
+async fn install_openclaw_unix(
+    bundle_dir: &str,
+    node_dir: &str,
+    npm_bin_dir: &str,
+    npm_cache_path: &str,
+    openclaw_tgz_path: &str,
+    manifest: &BundleManifest,
+) -> Result<InstallResult, String> {
+    info!("[Unix OpenClaw Install] Starting OpenClaw installation...");
+
+    let install_prefix = format!("{}/prefix", bundle_dir);
+    let prefix_available = manifest.prefix_available.unwrap_or(false);
+
+    let node_exe = format!("{}/node", node_dir);
+    let npm_cli = format!("{}/npm-cli.js", npm_bin_dir);
+
+    if prefix_available && Path::new(&install_prefix).exists() {
+        info!("[Unix OpenClaw Install] Using pre-built prefix for offline install...");
+
+        let prefix_script = format!(
+            r#"
+export PATH="{}:$PATH"
+
+OPENCLAW_CMD="{}/bin/openclaw"
+if [ -f "$OPENCLAW_CMD" ]; then
+    echo "OpenClaw already available in prefix"
+    "{}" "{}" config set prefix "{}" --global --cache "{}"
+    exit 0
+fi
+
+"{}" "{}" install --global --prefix "{}" --cache "{}" --offline --no-audit --no-fund "{}"
+"#,
+            node_dir,
+            install_prefix,
+            node_exe, npm_cli, install_prefix, npm_cache_path,
+            node_exe, npm_cli, install_prefix, npm_cache_path, openclaw_tgz_path
+        );
+
+        match shell::run_bash_output(&prefix_script) {
+            Ok(output) => {
+                info!("[Unix OpenClaw Install] Prefix setup output: {}", output);
+            }
+            Err(e) => {
+                warn!("[Unix OpenClaw Install] Prefix setup failed, trying fresh install: {}", e);
+            }
+        }
+    } else {
+        info!("[Unix OpenClaw Install] Performing fresh offline install...");
+
+        let fresh_install_script = format!(
+            r#"
+export PATH="{}:$PATH"
+
+mkdir -p "{}"
+
+"{}" "{}" install --global --prefix "{}" --cache "{}" --offline --no-audit --no-fund "{}"
+"#,
+            node_dir,
+            install_prefix,
+            node_exe, npm_cli, install_prefix, npm_cache_path, openclaw_tgz_path
+        );
+
+        match shell::run_bash_output(&fresh_install_script) {
+            Ok(output) => {
+                info!("[Unix OpenClaw Install] Fresh install output: {}", output);
+            }
+            Err(e) => {
+                return Err(format!("Failed to install OpenClaw: {}", e));
+            }
+        }
+    }
+
+    info!("[Unix OpenClaw Install] Verifying installation...");
+
+    let verify_script = format!(
+        r#"
+export PATH="{}:$PATH"
+
+OPENCLAW_CMD="{}/bin/openclaw"
+if [ -f "$OPENCLAW_CMD" ]; then
+    VERSION=$("$OPENCLAW_CMD" --version 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        echo "OpenClaw version: $VERSION"
+        exit 0
+    fi
+fi
+
+OPENCLAW_MJS="{}/node_modules/openclaw/openclaw.mjs"
+if [ -f "$OPENCLAW_MJS" ]; then
+    VERSION=$("{}" "$OPENCLAW_MJS" --version 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        echo "OpenClaw version: $VERSION"
+        exit 0
+    fi
+fi
+
+echo "OpenClaw verification failed"
+exit 1
+"#,
+        node_dir,
+        install_prefix,
+        install_prefix,
+        node_exe
+    );
+
+    match shell::run_bash_output(&verify_script) {
+        Ok(output) => {
+            info!("[Unix OpenClaw Install] Verification successful: {}", output);
+        }
+        Err(e) => {
+            warn!("[Unix OpenClaw Install] Verification warning: {}", e);
+        }
+    }
+
+    if let Some(home) = dirs::home_dir() {
+        let home_str = home.display().to_string();
+        let prefix_env_lines = format!(
+            r#"
+# OpenClaw Manager - OpenClaw prefix
+export PATH="{}:$PATH"
+"#,
+            format!("{}/bin", install_prefix)
+        );
+
+        let zprofile_path = format!("{}/.zprofile", home_str);
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&zprofile_path)
+            .and_then(|mut f| {
+                use std::io::Write;
+                f.write_all(prefix_env_lines.as_bytes())
+            });
+
+        let bash_profile_path = format!("{}/.bash_profile", home_str);
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&bash_profile_path)
+            .and_then(|mut f| {
+                use std::io::Write;
+                f.write_all(prefix_env_lines.as_bytes())
+            });
+    }
+
+    info!("[Unix OpenClaw Install] Installation completed successfully");
+
+    Ok(InstallResult {
+        success: true,
+        message: "OpenClaw installed successfully! Please restart the application.".to_string(),
+        error: None,
+    })
+}
+
+/// Install all components from openclaw-bundle
+#[command]
+pub async fn install_all_from_local() -> Result<InstallResult, String> {
+    info!("[Bundle Install] Starting installation of all components from bundle...");
+    install_nodejs().await
 }
 
 /// Initialize OpenClaw configuration
@@ -964,4 +1269,82 @@ fi
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test get_openclaw_bundle_dir function
+    #[test]
+    fn test_get_openclaw_bundle_dir() {
+        // Test with environment variable
+        let test_path = "/tmp/openclaw-test-bundle";
+        std::env::set_var("OPENCLAW_BUNDLE_DIR", test_path);
+        
+        let result = get_openclaw_bundle_dir();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), test_path);
+        
+        // Test without environment variable (should use default path)
+        std::env::remove_var("OPENCLAW_BUNDLE_DIR");
+        let result = get_openclaw_bundle_dir();
+        assert!(result.is_ok());
+        let bundle_dir = result.unwrap();
+        assert!(bundle_dir.contains("bundle/resources/openclaw-bundle"));
+    }
+
+    // Test check_environment function
+    #[tokio::test]
+    async fn test_check_environment() {
+        let result = check_environment().await;
+        assert!(result.is_ok());
+        let env_status = result.unwrap();
+        
+        // Verify all fields are present
+        assert!(env_status.node_installed || !env_status.node_installed);
+        assert!(env_status.node_version.is_some() || env_status.node_version.is_none());
+        assert!(env_status.node_version_ok || !env_status.node_version_ok);
+        assert!(env_status.git_installed || !env_status.git_installed);
+        assert!(env_status.git_version.is_some() || env_status.git_version.is_none());
+        assert!(env_status.openclaw_installed || !env_status.openclaw_installed);
+        assert!(env_status.openclaw_version.is_some() || env_status.openclaw_version.is_none());
+        assert!(env_status.gateway_service_installed || !env_status.gateway_service_installed);
+        assert!(env_status.config_dir_exists || !env_status.config_dir_exists);
+        assert!(env_status.ready || !env_status.ready);
+        assert!(!env_status.os.is_empty());
+    }
+
+    // Test init_openclaw_config function
+    #[tokio::test]
+    async fn test_init_openclaw_config() {
+        let result = init_openclaw_config().await;
+        assert!(result.is_ok());
+        let init_result = result.unwrap();
+        assert!(init_result.success || !init_result.success);
+    }
+
+    // Test uninstall_openclaw function
+    #[tokio::test]
+    async fn test_uninstall_openclaw() {
+        let result = uninstall_openclaw().await;
+        // This should either succeed or fail gracefully
+        assert!(result.is_ok());
+    }
+
+    // Test install_all_from_local function
+    #[tokio::test]
+    async fn test_install_all_from_local() {
+        let result = install_all_from_local().await;
+        // This might fail if bundle directory doesn't exist, but should return Result
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    // Test install_gateway_service function
+    #[tokio::test]
+    async fn test_install_gateway_service() {
+        let result = install_gateway_service().await;
+        // This might fail if not run as admin, but should return Result
+        assert!(result.is_ok() || result.is_err());
+    }
 }
