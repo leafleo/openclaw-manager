@@ -283,7 +283,7 @@ jobs:
           OPENCLAW_BUNDLE_SKIP_VERIFY: "1"
         run: |
           # Build DEB with optimized settings
-          npx tauri build --bundles deb --release
+          npx tauri build --bundles deb 
 
       - name: Upload macOS artifacts
         if: matrix.family == 'macos'
