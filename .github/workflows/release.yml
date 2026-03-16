@@ -129,7 +129,6 @@ jobs:
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           updaterJsonPreferNsis: true
-          args: --release
 
   publish-release:
     needs: [create-release, build]
