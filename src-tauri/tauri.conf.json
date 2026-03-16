@@ -34,15 +34,11 @@
   "bundle": {
     "active": true,
     "targets": [
-      "appimage",
-      "deb",
-      "dmg",
       "msi",
-      "rpm"
+      "nsis"
     ],
     "resources": [
-      "bundle/resources/**/*",
-      "runtime-bundles/**/*"
+      "bundle/resources/**/*"
     ],
     "icon": [
       "icons/32x32.png",

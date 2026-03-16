@@ -266,12 +266,20 @@ jobs:
           $env:CARGO_HTTP_MULTIPLEXING = "true"
           
           # Build with parallel jobs
-          Write-Output "Building NSIS with parallel jobs..."
+          Write-Output "Building nsis with parallel jobs..."
+          Write-Output "Current directory: $(Get-Location)"
+          Write-Output "Checking LICENSE.txt: $(Test-Path "LICENSE.txt")"
+          Write-Output "Checking tauri.conf.json: $(Test-Path "src-tauri/tauri.conf.json")"
+          
+          # 显示 tauri 命令版本
+          npx tauri --version
+          
+          # 执行构建
           npx tauri build --bundles nsis *>&1 | Tee-Object -FilePath $msiLog
           if ($LASTEXITCODE -ne 0) {
             $tail = (Get-Content $msiLog -Tail 120) -join "`n"
             $escaped = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
-            Write-Output "::warning title=MSI build failed::$escaped"
+            Write-Output "::error title=NSIS build failed::$escaped"
             $msiReady = $false
           }
 
