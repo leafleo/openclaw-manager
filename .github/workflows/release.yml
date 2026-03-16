@@ -21,15 +21,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
-            platform: macos
-            family: macos
+          # - os: macos-14
+          #   platform: macos
+          #   family: macos
           - os: windows-latest
             platform: windows
             family: windows
-          - os: ubuntu-22.04
-            platform: linux
-            family: linux
+          # - os: ubuntu-22.04
+          #   platform: linux
+          #   family: linux
 
     steps:
       - name: Checkout
@@ -40,11 +40,14 @@ jobs:
         with:
           path: node_modules
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: 'npm'
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -54,6 +57,9 @@ jobs:
             ~/.cargo/git
             src-tauri/target
           key: ${{ runner.os }}-rust-${{ hashFiles('**/Cargo.lock') }}
+          cache-on-failure: true
+          cache-targets: true
+          cache-all-crates: true
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -253,8 +259,15 @@ jobs:
           # Build MSI with optimized settings
           $msiLog = "windows-msi-build.log"
           $msiReady = $true
-          # Use --release flag for faster build
-          npx tauri build --bundles msi *>&1 | Tee-Object -FilePath $msiLog
+          
+          # Set environment variables for faster Rust compilation
+          $env:CARGO_BUILD_JOBS = "4"
+          $env:CARGO_NET_RETRY = "10"
+          $env:CARGO_HTTP_MULTIPLEXING = "true"
+          
+          # Build with parallel jobs
+          Write-Output "Building NSIS with parallel jobs..."
+          npx tauri build --bundles nsis *>&1 | Tee-Object -FilePath $msiLog
           if ($LASTEXITCODE -ne 0) {
             $tail = (Get-Content $msiLog -Tail 120) -join "`n"
             $escaped = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
@@ -300,7 +313,7 @@ jobs:
           name: bundle-windows
           if-no-files-found: error
           path: |
-            src-tauri/target/release/bundle/msi/*
+            src-tauri/target/release/bundle/nsis/*
 
       - name: Upload Linux artifacts
         if: matrix.family == 'linux'
