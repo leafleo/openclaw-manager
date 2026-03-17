@@ -414,7 +414,7 @@ async function main() {
         await fsp.rm(installPrefix, { recursive: true, force: true });
     }
 
-    const npmCli = path.join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js");
+    const npmCli = path.join(bundleDir, "npm", "bin", "npm-cli.js");
     const manifest = {
         name: "openclaw-offline-bundle",
         generatedAt: new Date().toISOString(),
@@ -441,26 +441,6 @@ async function main() {
     // npm tarballs may preserve read-only bits. Ensure resources stay writable so
     // repeated local builds can overwrite copied files without EACCES.
     await ensureUserWritableRecursive(bundleDir);
-
-    console.log("[bundle] reorganizing npm into node directory...");
-    const npmSourceDir = path.join(bundleDir, "npm");
-    const npmBinDir = path.join(npmSourceDir, "bin");
-    const npmBinFiles = await fsp.readdir(npmBinDir, { withFileTypes: true });
-    for (const dirent of npmBinFiles) {
-        if (!dirent.isFile()) {
-            continue;
-        }
-        const srcPath = path.join(npmBinDir, dirent.name);
-        const destPath = path.join(nodeDir, dirent.name);
-        await fsp.copyFile(srcPath, destPath);
-        if (process.platform !== "win32") {
-            await fsp.chmod(destPath, 0o755);
-        }
-    }
-    const nodeModulesDir = path.join(nodeDir, "node_modules");
-    await fsp.mkdir(nodeModulesDir, { recursive: true });
-    const npmTargetDir = path.join(nodeModulesDir, "npm");
-    await fsp.rename(npmSourceDir, npmTargetDir);
 
     await fsp.rm(tempDir, { recursive: true, force: true });
     console.log("[bundle] ready:", bundleDir);

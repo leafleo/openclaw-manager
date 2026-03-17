@@ -664,38 +664,6 @@ async fn install_nodejs_windows(
     let npm_bin_dir_win = npm_bin_dir.replace('/', "\\");
     let npm_dir_win = npm_bin_dir_win.replace("\\bin", "");
 
-    // Create node_modules directory and symlink npm
-    let symlink_script = format!(
-        r#"
-        $nodeDir = "{}"
-        $npmDir = "{}"
-        
-        # Create node_modules directory if it doesn't exist
-        $nodeModulesDir = Join-Path $nodeDir "node_modules"
-        if (-not (Test-Path $nodeModulesDir)) {{
-            New-Item -ItemType Directory -Force -Path $nodeModulesDir | Out-Null
-            Write-Host "Created node_modules directory"
-        }}
-        
-        # Create symlink from npm to node/node_modules/npm
-        $npmSymlinkPath = Join-Path $nodeModulesDir "npm"
-        if (-not (Test-Path $npmSymlinkPath)) {{
-            New-Item -ItemType Junction -Path $npmSymlinkPath -Target $npmDir | Out-Null
-            Write-Host "Created symlink from $npmSymlinkPath to $npmDir"
-        }}
-        "#,
-        node_dir_win, npm_dir_win
-    );
-
-    match shell::run_powershell_output(&symlink_script) {
-        Ok(output) => {
-            info!("[Windows Node Install] Symlinks created: {}", output);
-        }
-        Err(e) => {
-            warn!("[Windows Node Install] Symlink creation warning: {}", e);
-        }
-    }
-
     let env_script = format!(
         r#"
         $nodeDir = "{}"
@@ -708,12 +676,6 @@ async fn install_nodejs_windows(
             Write-Host "Added node to PATH"
         }}
 
-        if ($currentPath -notlike "*$npmBinDir*") {{
-            $newPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-            [Environment]::SetEnvironmentVariable("PATH", "$npmBinDir;$newPath", "User")
-            Write-Host "Added npm/bin to PATH"
-        }}
-
         [Environment]::SetEnvironmentVariable("NODE_HOME", $nodeDir, "User")
         Write-Host "Set NODE_HOME to $nodeDir"
         "#,
@@ -723,6 +685,14 @@ async fn install_nodejs_windows(
     match shell::run_powershell_output(&env_script) {
         Ok(output) => {
             info!("[Windows Node Install] Environment variables configured: {}", output);
+            
+            // Update current process environment variables to make changes immediately available
+            std::env::set_var("NODE_HOME", node_dir);
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            if !current_path.contains(node_dir) {
+                let new_path = format!("{};{}", node_dir, current_path);
+                std::env::set_var("PATH", new_path);
+            }
         }
         Err(e) => {
             return Err(format!("Failed to set environment variables: {}", e));
@@ -926,10 +896,18 @@ async fn install_openclaw_windows(
     let _ = shell::run_powershell_output(&prefix_env_script);
 
     info!("[Windows OpenClaw Install] Installation completed successfully");
+    
+    // Update current process environment variables to make openclaw command immediately available
+    let prefix_bin = format!("{}\\bin", install_prefix);
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    if !current_path.contains(&prefix_bin) {
+        let new_path = format!("{};{}", prefix_bin, current_path);
+        std::env::set_var("PATH", new_path);
+    }
 
     Ok(InstallResult {
         success: true,
-        message: "OpenClaw installed successfully! Please restart the application.".to_string(),
+        message: "OpenClaw installed successfully!".to_string(),
         error: None,
     })
 }
@@ -940,31 +918,6 @@ async fn install_nodejs_unix(
     npm_bin_dir: &str,
 ) -> Result<InstallResult, String> {
     info!("[Unix Node Install] Setting up environment variables...");
-
-    // Create node_modules directory and symlink npm
-    let npm_dir = npm_bin_dir.replace("/bin", "");
-    let symlink_script = format!(
-        r#"
-# Create node_modules directory if it doesn't exist
-mkdir -p "{}/node_modules"
-
-# Create symlink from npm to node/node_modules/npm
-if [ ! -L "{}/node_modules/npm" ]; then
-    ln -s "{}" "{}/node_modules/npm"
-    echo "Created symlink from {}/node_modules/npm to {}"
-fi
-"#,
-        node_dir, node_dir, npm_dir, node_dir, node_dir, npm_dir
-    );
-
-    match shell::run_bash_output(&symlink_script) {
-        Ok(output) => {
-            info!("[Unix Node Install] Symlinks created: {}", output);
-        }
-        Err(e) => {
-            warn!("[Unix Node Install] Symlink creation warning: {}", e);
-        }
-    }
 
     if let Some(home) = dirs::home_dir() {
         let home_str = home.display().to_string();
@@ -998,6 +951,15 @@ export PATH="$NODE_HOME:{}:$PATH"
                 use std::io::Write;
                 f.write_all(env_lines.as_bytes())
             });
+    }
+    
+    // Update current process environment variables to make changes immediately available
+    std::env::set_var("NODE_HOME", node_dir);
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let path_to_add = format!("{}:{}", node_dir, npm_bin_dir);
+    if !current_path.contains(node_dir) || !current_path.contains(npm_bin_dir) {
+        let new_path = format!("{}:{}", path_to_add, current_path);
+        std::env::set_var("PATH", new_path);
     }
 
     info!("[Unix Node Install] Verifying Node.js installation...");
@@ -1184,10 +1146,18 @@ export PATH="{}:$PATH"
     }
 
     info!("[Unix OpenClaw Install] Installation completed successfully");
+    
+    // Update current process environment variables to make openclaw command immediately available
+    let prefix_bin = format!("{}/bin", install_prefix);
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    if !current_path.contains(&prefix_bin) {
+        let new_path = format!("{}:{}", prefix_bin, current_path);
+        std::env::set_var("PATH", new_path);
+    }
 
     Ok(InstallResult {
         success: true,
-        message: "OpenClaw installed successfully! Please restart the application.".to_string(),
+        message: "OpenClaw installed successfully!".to_string(),
         error: None,
     })
 }

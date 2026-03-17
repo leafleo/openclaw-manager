@@ -1,5 +1,5 @@
 {
-  "name": "openclaw-desktop",
+  "name": "openclaw-manager",
   "version": "0.0.19",
   "description": "🦞 OpenClaw Cross-Platform Manager - High-Performance AI Assistant Configuration & Service Management",
   "author": "OpenClaw Team",
@@ -26,6 +26,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^11.15.0",
     "lucide-react": "^0.468.0",
+    "openclaw": "^2026.3.12",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^5.0.3"
