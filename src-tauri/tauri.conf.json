@@ -34,7 +34,8 @@
   "bundle": {
     "active": true,
     "targets": [
-      "nsis"
+      "nsis",
+      "dmg"
     ],
     "resources": [
       "bundle/resources/**/*"

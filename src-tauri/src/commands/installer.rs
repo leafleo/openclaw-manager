@@ -539,9 +539,38 @@ fn get_openclaw_bundle_dir() -> Result<String, String> {
         return Ok(path);
     }
     
+    // Check macOS app Contents directory (for macOS installed version)
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(parent) = exe_dir.parent() {
+            if parent.file_name().map(|name| name.to_string_lossy() == "MacOS").unwrap_or(false) {
+                if let Some(app_dir) = parent.parent() {
+                    let macos_bundle_dir = app_dir.join("bundle").join("resources").join("openclaw-bundle");
+                    if macos_bundle_dir.exists() {
+                        let path = macos_bundle_dir.to_string_lossy().to_string();
+                        info!("[Bundle Install] OpenClaw bundle directory (macOS Contents): {}", path);
+                        return Ok(path);
+                    }
+                }
+            }
+        }
+    }
+    
     // Both paths don't exist, return error
     let runtime_path = runtime_bundles_dir.to_string_lossy().to_string();
     let bundle_path = bundle_dir.to_string_lossy().to_string();
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(parent) = exe_dir.parent() {
+            if parent.file_name().map(|name| name.to_string_lossy() == "MacOS").unwrap_or(false) {
+                if let Some(app_dir) = parent.parent() {
+                    let macos_bundle_dir = app_dir.join("bundle").join("resources").join("openclaw-bundle");
+                    let macos_path = macos_bundle_dir.to_string_lossy().to_string();
+                    return Err(format!("Runtime bundles directory not found. Tried: \n1. {}\n2. {}\n3. {}", runtime_path, bundle_path, macos_path));
+                }
+            }
+        }
+    }
     Err(format!("Runtime bundles directory not found. Tried: \n1. {}\n2. {}", runtime_path, bundle_path))
 }
 

@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -35,6 +35,7 @@ function normalizeNodeArch(rawArch) {
 }
 
 function run(cmd, args, opts = {}) {
+    console.log(`[bundle] Executing: ${cmd} ${args.join(" ")}`);
     const useShell = process.platform === "win32" && cmd === "npm";
     const result = spawnSync(cmd, args, {
         cwd: opts.cwd,
@@ -46,18 +47,69 @@ function run(cmd, args, opts = {}) {
         maxBuffer: RUN_MAX_BUFFER
     });
 
+    console.log(`[bundle] Command exited with status: ${result.status}`);
+    
     if (result.error) {
+        console.error(`[bundle] Command error: ${String(result.error)}`);
         throw new Error(`${cmd} ${args.join(" ")} failed\n${String(result.error)}`);
     }
 
     if (result.status !== 0) {
         const out = (result.stdout ?? "").trim();
         const err = (result.stderr ?? "").trim();
+        console.error(`[bundle] Command stdout: ${out}`);
+        console.error(`[bundle] Command stderr: ${err}`);
         const detail = [out, err].filter(Boolean).join("\n");
         throw new Error(`${cmd} ${args.join(" ")} failed${detail ? `\n${detail}` : ""}`);
     }
 
-    return (result.stdout ?? "").trim();
+    const output = (result.stdout ?? "").trim();
+    //console.log(`[bundle] Command output: ${output}`);
+    return output;
+}
+
+async function runAsync(cmd, args, opts = {}) {
+    console.log(`[bundle] Executing (async): ${cmd} ${args.join(" ")}`);
+    const useShell = process.platform === "win32" && cmd === "npm";
+    
+    return new Promise((resolve, reject) => {
+        const child = spawn(cmd, args, {
+            cwd: opts.cwd,
+            env: opts.env ?? process.env,
+            stdio: ["ignore", "pipe", "pipe"],
+            shell: useShell,
+            windowsHide: true
+        });
+
+        let stdout = "";
+        let stderr = "";
+
+        child.stdout.on("data", (data) => {
+            const chunk = data.toString();
+            stdout += chunk;
+            process.stdout.write(chunk);
+        });
+
+        child.stderr.on("data", (data) => {
+            const chunk = data.toString();
+            stderr += chunk;
+            process.stderr.write(chunk);
+        });
+
+        child.on("close", (code) => {
+            console.log(`[bundle] Command exited with status: ${code}`);
+            if (code !== 0) {
+                reject(new Error(`${cmd} ${args.join(" ")} failed with exit code ${code}\n${stderr}`));
+            } else {
+                resolve(stdout.trim());
+            }
+        });
+
+        child.on("error", (error) => {
+            console.error(`[bundle] Command error: ${String(error)}`);
+            reject(new Error(`${cmd} ${args.join(" ")} failed\n${String(error)}`));
+        });
+    });
 }
 
 function parseVersion(v) {
@@ -315,6 +367,9 @@ async function resolveBundledNpmDir() {
 }
 
 async function main() {
+    console.log(`[bundle] Starting at: ${new Date().toISOString()}`);
+    const start = Date.now();
+    
     if (process.env.OPENCLAW_DESKTOP_SKIP_BUNDLE_PREP === "1") {
         console.log("[bundle] skip prepare because OPENCLAW_DESKTOP_SKIP_BUNDLE_PREP=1");
         return;
@@ -323,12 +378,21 @@ async function main() {
     await ensureCleanDir(bundleDir);
     await ensureCleanDir(tempDir);
 
+    console.log(`[bundle] Cleanup done in ${(Date.now() - start) / 1000}s`);
+    
     const packed = packOpenclawTarball();
+    
+    console.log(`[bundle] packOpenclawTarball done in ${(Date.now() - start) / 1000}s`);
 
     const runtime = await resolveBundledNodeRuntime();
+    
+    console.log(`[bundle] resolveBundledNodeRuntime done in ${(Date.now() - start) / 1000}s`);
+    
     const bundledTgz = path.join(bundleDir, "openclaw.tgz");
     await fsp.copyFile(packed.packedFile, bundledTgz);
     await packed.cleanup();
+
+    console.log(`[bundle] Openclaw tgz copied in ${(Date.now() - start) / 1000}s`);
 
     console.log("[bundle] copying node runtime and npm...");
     const nodeDir = path.join(bundleDir, "node");
@@ -339,6 +403,8 @@ async function main() {
         await fsp.chmod(nodeTarget, 0o755);
     }
     ensureFile(nodeTarget, "bundled node runtime");
+
+    console.log(`[bundle] Node runtime copied in ${(Date.now() - start) / 1000}s`);
 
     let npmDir;
     try {
@@ -356,16 +422,26 @@ async function main() {
         filter: (src) => path.basename(src) !== ".npmrc"
     });
 
+    console.log(`[bundle] NPM copied in ${(Date.now() - start) / 1000}s`);
+
     console.log("[bundle] warming offline npm cache...");
     const cacheDir = path.join(bundleDir, "npm-cache");
     const installPrefix = path.join(tempDir, "install-prefix");
     await fsp.mkdir(cacheDir, { recursive: true });
+    console.log("[bundle] Cache directory created:", cacheDir);
     let prefixAvailable = false;
     const bundledPrefix = path.join(bundleDir, "prefix");
     await fsp.rm(bundledPrefix, { recursive: true, force: true });
+    console.log("[bundle] Bundled prefix cleaned");
+
+    console.log(`[bundle] Cache setup done in ${(Date.now() - start) / 1000}s`);
 
     try {
-        run("npm", [
+        console.log("[bundle] Running npm install...");
+        console.log("[bundle] Install prefix:", installPrefix);
+        console.log("[bundle] Bundle tgz:", bundledTgz);
+        const npmInstallStart = Date.now();
+        await runAsync("npm", [
             "install",
             "--prefix",
             installPrefix,
@@ -376,10 +452,13 @@ async function main() {
             "--no-fund",
             "--loglevel=error"
         ]);
+        console.log(`[bundle] npm install completed in ${(Date.now() - npmInstallStart) / 1000}s`);
 
         console.log("[bundle] snapshot installed prefix for fully-offline install...");
+        const snapshotStart = Date.now();
         // npm local install 会产生指向临时目录的绝对软链；这里解引用，避免打包后出现失效链接。
         await fsp.cp(installPrefix, bundledPrefix, { recursive: true, dereference: true });
+        console.log(`[bundle] Prefix snapshot copied in ${(Date.now() - snapshotStart) / 1000}s`);
 
         if (process.env.OPENCLAW_BUNDLE_SKIP_VERIFY === "1") {
             console.log("[bundle] skip prefix verification because OPENCLAW_BUNDLE_SKIP_VERIFY=1");
@@ -389,6 +468,7 @@ async function main() {
             );
         } else {
             console.log("[bundle] verifying bundled prefix snapshot...");
+            const verifyStart = Date.now();
             const verifyPrefix = path.join(tempDir, "verify-prefix");
             await fsp.cp(bundledPrefix, verifyPrefix, { recursive: true });
             const verifyOpenclaw = resolveInstalledOpenclaw(verifyPrefix);
@@ -402,8 +482,10 @@ async function main() {
                 run(verifyOpenclaw, ["--version"], { env: verifyEnv });
             }
             await fsp.rm(verifyPrefix, { recursive: true, force: true });
+            console.log(`[bundle] Prefix verification done in ${(Date.now() - verifyStart) / 1000}s`);
         }
         prefixAvailable = true;
+        console.log("[bundle] Prefix available set to true");
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.warn(`[bundle] WARN: prefix snapshot failed, fallback to npm-cache mode: ${message}`);
@@ -413,6 +495,36 @@ async function main() {
     } finally {
         await fsp.rm(installPrefix, { recursive: true, force: true });
     }
+
+    console.log(`[bundle] NPM install and prefix setup done in ${(Date.now() - start) / 1000}s`);
+
+    // npm tarballs may preserve read-only bits. Ensure resources stay writable so
+    // repeated local builds can overwrite copied files without EACCES.
+    await ensureUserWritableRecursive(bundleDir);
+
+    console.log(`[bundle] Permissions fixed in ${(Date.now() - start) / 1000}s`);
+
+    console.log("[bundle] reorganizing npm into node directory...");
+    const npmSourceDir = path.join(bundleDir, "npm");
+    const npmBinDir = path.join(npmSourceDir, "bin");
+    const npmBinFiles = await fsp.readdir(npmBinDir, { withFileTypes: true });
+    for (const dirent of npmBinFiles) {
+        if (!dirent.isFile()) {
+            continue;
+        }
+        const srcPath = path.join(npmBinDir, dirent.name);
+        const destPath = path.join(nodeDir, dirent.name);
+        await fsp.copyFile(srcPath, destPath);
+        if (process.platform !== "win32") {
+            await fsp.chmod(destPath, 0o755);
+        }
+    }
+    const nodeModulesDir = path.join(nodeDir, "node_modules");
+    await fsp.mkdir(nodeModulesDir, { recursive: true });
+    const npmTargetDir = path.join(nodeModulesDir, "npm");
+    await fsp.rename(npmSourceDir, npmTargetDir);
+
+    console.log(`[bundle] NPM reorganized in ${(Date.now() - start) / 1000}s`);
 
     const npmCli = path.join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js");
     const manifest = {
@@ -438,32 +550,11 @@ async function main() {
         "utf8"
     );
 
-    // npm tarballs may preserve read-only bits. Ensure resources stay writable so
-    // repeated local builds can overwrite copied files without EACCES.
-    await ensureUserWritableRecursive(bundleDir);
-
-    console.log("[bundle] reorganizing npm into node directory...");
-    const npmSourceDir = path.join(bundleDir, "npm");
-    const npmBinDir = path.join(npmSourceDir, "bin");
-    const npmBinFiles = await fsp.readdir(npmBinDir, { withFileTypes: true });
-    for (const dirent of npmBinFiles) {
-        if (!dirent.isFile()) {
-            continue;
-        }
-        const srcPath = path.join(npmBinDir, dirent.name);
-        const destPath = path.join(nodeDir, dirent.name);
-        await fsp.copyFile(srcPath, destPath);
-        if (process.platform !== "win32") {
-            await fsp.chmod(destPath, 0o755);
-        }
-    }
-    const nodeModulesDir = path.join(nodeDir, "node_modules");
-    await fsp.mkdir(nodeModulesDir, { recursive: true });
-    const npmTargetDir = path.join(nodeModulesDir, "npm");
-    await fsp.rename(npmSourceDir, npmTargetDir);
+    console.log(`[bundle] Manifest generated in ${(Date.now() - start) / 1000}s`);
 
     await fsp.rm(tempDir, { recursive: true, force: true });
     console.log("[bundle] ready:", bundleDir);
+    console.log(`[bundle] All done in ${(Date.now() - start) / 1000}s`);
 }
 
 main().catch((error) => {
