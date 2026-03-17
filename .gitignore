@@ -32,3 +32,4 @@ src-tauri/bundle/
 
 # 私钥
 *.pem
+#.tmp/
